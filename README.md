@@ -23,7 +23,7 @@ FFmpeg 기반 영상 변환 웹 앱. 영상 파일을 다양한 해상도/비트
 ### 2. 설치 및 실행
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ffmpeg-videomaker.git
+git clone https://github.com/JaeWoo0317/ffmpeg-videomaker.git
 cd ffmpeg-videomaker
 
 # 의존성 설치
