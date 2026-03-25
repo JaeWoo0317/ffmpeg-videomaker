@@ -202,6 +202,50 @@ export default function VideoSettings({ settings, setSettings, gpuInfo }) {
       </div>
 
       <div className="form-row">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={settings.parallelEncode || false}
+            onChange={(e) => update('parallelEncode', e.target.checked)}
+            disabled={settings.gpuAccel !== 'cpu' && gpuInfo?.available}
+          />
+          세그먼트 병렬 인코딩
+        </label>
+        {settings.gpuAccel !== 'cpu' && gpuInfo?.available && (
+          <span style={{ fontSize: 12, color: '#f59e0b' }}>GPU 사용 시 비활성 (GPU가 더 빠름)</span>
+        )}
+      </div>
+
+      {settings.parallelEncode && (settings.gpuAccel === 'cpu' || !gpuInfo?.available) && (
+        <div className="form-row">
+          <label>병렬 세그먼트 수</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <select value={settings.parallelSegments || 'auto'} onChange={(e) => update('parallelSegments', e.target.value === 'auto' ? '' : parseInt(e.target.value))} style={{ flex: 1 }}>
+              <option value="auto">자동 ({gpuInfo?.cpuCores || '?'}코어)</option>
+              {[2, 4, 6, 8, 12, 16].filter(n => n <= (gpuInfo?.cpuCores || 16)).map(n => (
+                <option key={n} value={n}>{n}개{n === gpuInfo?.cpuCores ? ' (최대)' : ''}</option>
+              ))}
+            </select>
+            <span style={{ color: '#888', fontSize: 12 }}>또는</span>
+            <input
+              type="number"
+              min="2"
+              max={gpuInfo?.cpuCores || 32}
+              value={settings.parallelSegments || ''}
+              placeholder="직접 입력"
+              onChange={(e) => {
+                const v = parseInt(e.target.value);
+                if (v >= 2) update('parallelSegments', v);
+                else if (!e.target.value) update('parallelSegments', '');
+              }}
+              style={{ width: 80, padding: '6px 8px', background: '#333', color: '#fff', border: '1px solid #555', borderRadius: 4 }}
+            />
+          </div>
+          <span style={{ fontSize: 12, color: '#888' }}>CPU 코어: {gpuInfo?.cpuCores || '?'}개 | 영상을 N등분하여 동시 인코딩</span>
+        </div>
+      )}
+
+      <div className="form-row">
         <label>파일 크기 제한</label>
         <input
           type="number"

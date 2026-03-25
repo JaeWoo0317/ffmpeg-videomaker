@@ -6,7 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { convertVideo, extractAudio, checkGpuSupport } = require('./ffmpeg');
+const { convertVideo, convertVideoParallel, extractAudio, checkGpuSupport } = require('./ffmpeg');
 const { transferFile } = require('./transfer');
 
 const app = express();
@@ -27,6 +27,13 @@ if (fs.existsSync(CLIENT_DIST)) {
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const OUTPUT_DIR = path.join(__dirname, 'output');
 const ASSET_DIR = path.join(__dirname, 'assets');
+const PRESET_FILE = path.join(__dirname, 'presets.json');
+// 서버 시작 시 이전 임시 파일 정리
+for (const dir of [UPLOAD_DIR, OUTPUT_DIR]) {
+  if (fs.existsSync(dir)) {
+    fs.readdirSync(dir).forEach(f => { try { fs.unlinkSync(path.join(dir, f)); } catch {} });
+  }
+}
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 fs.mkdirSync(ASSET_DIR, { recursive: true });
@@ -84,7 +91,36 @@ app.post('/api/upload', upload.array('files', 20), (req, res) => {
 
 app.get('/api/gpu-check', async (req, res) => {
   if (!gpuCache) gpuCache = await checkGpuSupport();
-  res.json(gpuCache);
+  res.json({ ...gpuCache, cpuCores: os.cpus().length });
+});
+
+// === 프리셋 API ===
+const loadPresets = () => {
+  try {
+    if (fs.existsSync(PRESET_FILE)) return JSON.parse(fs.readFileSync(PRESET_FILE, 'utf8'));
+  } catch {}
+  return {};
+};
+const savePresets = (presets) => fs.writeFileSync(PRESET_FILE, JSON.stringify(presets, null, 2), 'utf8');
+
+app.get('/api/presets', (req, res) => {
+  res.json(loadPresets());
+});
+
+app.post('/api/presets', (req, res) => {
+  const { name, settings } = req.body;
+  if (!name || !settings) return res.status(400).json({ error: 'name and settings required' });
+  const presets = loadPresets();
+  presets[name] = { settings, createdAt: new Date().toISOString() };
+  savePresets(presets);
+  res.json({ success: true, presets });
+});
+
+app.delete('/api/presets/:name', (req, res) => {
+  const presets = loadPresets();
+  delete presets[req.params.name];
+  savePresets(presets);
+  res.json({ success: true, presets });
 });
 
 app.post('/api/convert', async (req, res) => {
@@ -139,15 +175,18 @@ app.post('/api/convert', async (req, res) => {
         };
 
         if (task.type === 'video') {
-          await convertVideo(inputPath, task.outputPath, settings, onProgress);
+          if (settings.parallelEncode && !settings.gpuEncoder) {
+            await convertVideoParallel(inputPath, task.outputPath, settings, onProgress);
+          } else {
+            await convertVideo(inputPath, task.outputPath, settings, onProgress);
+          }
         } else {
           await extractAudio(inputPath, task.outputPath, settings, onProgress);
         }
         results.push({ originalName: file.originalName, outputFilename: task.outputFilename, type: task.type });
       }
 
-      // 변환 완료 후 임시 업로드 파일 삭제
-      fs.unlink(inputPath, () => {});
+      // 임시 업로드 파일은 유지 (재변환 가능하도록)
     }
 
     // 전송 처리

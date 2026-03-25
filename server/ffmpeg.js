@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 
 const WINGET_LINKS = path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links');
@@ -379,6 +380,137 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
   await runFFmpeg(args, onProgress, effectiveDuration);
 }
 
+// === 세그먼트 병렬 인코딩 ===
+
+function getKeyframes(inputPath, duration) {
+  return new Promise((resolve) => {
+    const proc = spawn('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'packet=pts_time,flags',
+      '-of', 'csv=p=0',
+      inputPath,
+    ], { env: { ...process.env, PATH: ENV_PATH } });
+
+    let output = '';
+    proc.stdout.on('data', (d) => (output += d.toString()));
+    proc.on('close', () => {
+      const keyframes = [];
+      for (const line of output.split('\n')) {
+        const parts = line.trim().split(',');
+        if (parts.length >= 2 && parts[1] && parts[1].includes('K')) {
+          const t = parseFloat(parts[0]);
+          if (!isNaN(t)) keyframes.push(t);
+        }
+      }
+      resolve(keyframes.length > 0 ? keyframes : null);
+    });
+    proc.on('error', () => resolve(null));
+  });
+}
+
+function findNearestKeyframe(keyframes, targetTime) {
+  if (!keyframes || keyframes.length === 0) return targetTime;
+  let closest = keyframes[0];
+  let minDiff = Math.abs(keyframes[0] - targetTime);
+  for (const kf of keyframes) {
+    const diff = Math.abs(kf - targetTime);
+    if (diff < minDiff) { minDiff = diff; closest = kf; }
+    if (kf > targetTime) break;
+  }
+  return closest;
+}
+
+async function convertVideoParallel(inputPath, outputPath, settings, onProgress) {
+  const totalDuration = await getVideoDuration(inputPath);
+  if (totalDuration <= 0) {
+    // 길이를 알 수 없으면 일반 변환으로 폴백
+    return convertVideo(inputPath, outputPath, settings, onProgress);
+  }
+
+  const numSegments = settings.parallelSegments || os.cpus().length;
+  const segDuration = totalDuration / numSegments;
+
+  // 키프레임 목록 가져오기 (정확한 분할점)
+  const keyframes = await getKeyframes(inputPath, totalDuration);
+
+  // 분할 지점 계산
+  const splitPoints = [0];
+  for (let i = 1; i < numSegments; i++) {
+    const target = segDuration * i;
+    splitPoints.push(keyframes ? findNearestKeyframe(keyframes, target) : target);
+  }
+  splitPoints.push(totalDuration);
+
+  // 임시 디렉토리
+  const tmpDir = path.join(os.tmpdir(), `videomaker_parallel_${Date.now()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  const segmentFiles = [];
+  const segmentProgresses = new Array(numSegments).fill(0);
+
+  const reportProgress = () => {
+    const totalPercent = segmentProgresses.reduce((a, b) => a + b, 0) / numSegments;
+    onProgress(Math.round(totalPercent));
+  };
+
+  // 세그먼트별 인코딩 args 빌드 (공통 설정 복사, 트림 구간 변경)
+  const buildSegmentSettings = (startSec, endSec) => {
+    const segSettings = { ...settings };
+    segSettings.trimStart = formatTime(startSec);
+    segSettings.trimEnd = formatTime(endSec);
+    // 자막/워터마크는 각 세그먼트에 적용
+    return segSettings;
+  };
+
+  try {
+    // 모든 세그먼트 동시 인코딩
+    const promises = [];
+    for (let i = 0; i < numSegments; i++) {
+      const segStart = splitPoints[i];
+      const segEnd = splitPoints[i + 1];
+      const segOutput = path.join(tmpDir, `seg_${String(i).padStart(3, '0')}${path.extname(outputPath)}`);
+      segmentFiles.push(segOutput);
+
+      const segSettings = buildSegmentSettings(segStart, segEnd);
+      const segOnProgress = (percent) => {
+        segmentProgresses[i] = percent;
+        reportProgress();
+      };
+
+      promises.push(convertVideo(inputPath, segOutput, segSettings, segOnProgress));
+    }
+
+    await Promise.all(promises);
+
+    // concat 파일 리스트 생성
+    const concatListPath = path.join(tmpDir, 'concat_list.txt');
+    const concatContent = segmentFiles.map(f => `file '${f.replace(/\\/g, '/')}'`).join('\n');
+    fs.writeFileSync(concatListPath, concatContent, 'utf8');
+
+    // concat으로 합치기 (재인코딩 없이 스트림 복사)
+    const concatArgs = ['-f', 'concat', '-safe', '0', '-i', concatListPath, '-c', 'copy', outputPath];
+    console.log('[FFmpeg CONCAT]', 'ffmpeg -y', concatArgs.join(' '));
+    await runFFmpeg(concatArgs, () => {}, 0);
+
+    onProgress(100);
+  } finally {
+    // 임시 파일 정리
+    try {
+      for (const f of segmentFiles) { if (fs.existsSync(f)) fs.unlinkSync(f); }
+      const concatList = path.join(tmpDir, 'concat_list.txt');
+      if (fs.existsSync(concatList)) fs.unlinkSync(concatList);
+      fs.rmdirSync(tmpDir);
+    } catch {}
+  }
+}
+
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = (seconds % 60).toFixed(3);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(6, '0')}`;
+}
+
 async function extractAudio(inputPath, outputPath, settings, onProgress) {
   const totalDuration = await getVideoDuration(inputPath);
   const trimStartSec = parseTimeToSeconds(settings.trimStart);
@@ -410,4 +542,4 @@ async function extractAudio(inputPath, outputPath, settings, onProgress) {
   await runFFmpeg(args, onProgress, effectiveDuration);
 }
 
-module.exports = { convertVideo, extractAudio, checkGpuSupport };
+module.exports = { convertVideo, convertVideoParallel, extractAudio, checkGpuSupport };

@@ -15,19 +15,30 @@ const TABS = [
   { id: 'crop', label: '크롭' },
 ];
 
-export default function SettingsModal({ open, onClose, settings, setSettings, gpuInfo, uploadAsset }) {
+export default function SettingsModal({ open, onClose, settings, setSettings, gpuInfo, uploadAsset, onSavePreset }) {
   const [activeTab, setActiveTab] = useState('video');
+  const [showPresetInput, setShowPresetInput] = useState(false);
+  const [presetName, setPresetName] = useState('');
 
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      setShowPresetInput(false);
+      setPresetName('');
     }
     return () => { document.body.style.overflow = ''; };
   }, [open]);
 
   if (!open) return null;
+
+  const handleSavePreset = () => {
+    if (!presetName.trim()) return;
+    onSavePreset(presetName.trim());
+    setPresetName('');
+    setShowPresetInput(false);
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -58,7 +69,28 @@ export default function SettingsModal({ open, onClose, settings, setSettings, gp
           {activeTab === 'crop' && <CropSettings settings={settings} setSettings={setSettings} />}
         </div>
 
+        {showPresetInput && (
+          <div className="preset-save-form" style={{ margin: '0 24px 16px' }}>
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="프리셋 이름 입력"
+              className="preset-name-input"
+              onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+              autoFocus
+            />
+            <button className="btn preset" onClick={handleSavePreset}>저장</button>
+            <button className="btn" style={{ background: '#555' }} onClick={() => { setShowPresetInput(false); setPresetName(''); }}>취소</button>
+          </div>
+        )}
+
         <div className="modal-footer">
+          {!showPresetInput && (
+            <button className="btn preset save-preset" onClick={() => setShowPresetInput(true)} style={{ maxWidth: 200 }}>
+              프리셋에 추가
+            </button>
+          )}
           <button className="btn convert" onClick={onClose} style={{ maxWidth: 200 }}>확인</button>
         </div>
       </div>

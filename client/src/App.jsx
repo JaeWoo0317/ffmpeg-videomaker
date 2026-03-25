@@ -20,6 +20,8 @@ const DEFAULT_SETTINGS = {
   preset: 'medium',
   gpuAccel: 'auto',
   gpuEncoder: '',
+  parallelEncode: false,
+  parallelSegments: '',
   maxFileSizeMB: '',
   scaleFilter: 'bilinear',
   codec: 'h264',
@@ -66,6 +68,11 @@ function App() {
   const [errors, setErrors] = useState([]);
   const jobIdRef = useRef(null);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [userPresets, setUserPresets] = useState({});
+
+  useEffect(() => {
+    fetch('/api/presets').then(r => r.json()).then(setUserPresets).catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch('/api/gpu-check')
@@ -164,11 +171,25 @@ function App() {
   };
 
   const applyPreset = (preset) => {
-    const presets = {
+    const builtIn = {
       high: { outputs: ['high'], resolution: 'original', bitrateMode: 'crf', crf: 18, audioBitrate: 256, codec: 'h264', profile: 'high' },
       low: { outputs: ['low'], resolution: '720p', bitrateMode: 'crf', crf: 28, audioBitrate: 128, codec: 'h264', profile: 'main' },
     };
-    if (presets[preset]) setSettings((s) => ({ ...s, ...presets[preset] }));
+    if (builtIn[preset]) setSettings((s) => ({ ...s, ...builtIn[preset] }));
+  };
+
+  const applyUserPreset = (name) => {
+    if (userPresets[name]) {
+      const saved = userPresets[name].settings;
+      // targets는 유지 (전송 설정은 프리셋에 포함하지 않음)
+      setSettings((s) => ({ ...s, ...saved, targets: s.targets }));
+    }
+  };
+
+  const deleteUserPreset = async (name) => {
+    const res = await fetch(`/api/presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await res.json();
+    setUserPresets(data.presets);
   };
 
   return (
@@ -188,6 +209,12 @@ function App() {
               <div className="preset-buttons">
                 <button className="btn preset" onClick={() => applyPreset('high')}>고화질</button>
                 <button className="btn preset" onClick={() => applyPreset('low')}>저화질</button>
+                {Object.keys(userPresets).map((name) => (
+                  <div key={name} className="user-preset-wrapper">
+                    <button className="btn preset user" onClick={() => applyUserPreset(name)}>{name}</button>
+                    <button className="btn-preset-badge-delete" onClick={() => deleteUserPreset(name)} title="삭제">✕</button>
+                  </div>
+                ))}
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
@@ -233,6 +260,16 @@ function App() {
               setSettings={setSettings}
               gpuInfo={gpuInfo}
               uploadAsset={uploadAsset}
+              onSavePreset={async (name) => {
+                const { targets, subtitleFile, watermarkFile, ...saveable } = settings;
+                const res = await fetch('/api/presets', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name, settings: saveable }),
+                });
+                const data = await res.json();
+                setUserPresets(data.presets);
+              }}
             />
 
             <OutputTargets settings={settings} setSettings={setSettings} />
@@ -295,7 +332,7 @@ function App() {
                             </li>
                           ))}
                         </ul>
-                        <button className="btn convert" style={{ marginTop: 16, width: '100%' }} onClick={() => { setProgress(null); setTransferProgress(null); setErrors([]); setResults([]); }}>닫기</button>
+                        <button className="btn convert" style={{ marginTop: 16, width: '100%' }} onClick={() => { cleanupListeners(); setProgress(null); setTransferProgress(null); setErrors([]); setResults([]); setConverting(false); }}>닫기</button>
                       </div>
                     )}
                   </div>
