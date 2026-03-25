@@ -156,13 +156,16 @@ app.post('/api/convert', async (req, res) => {
       const outputPath = path.join(OUTPUT_DIR, result.outputFilename);
       for (const target of enabledTargets) {
         try {
-          await transferFile(outputPath, result.outputFilename, target, (percent) => {
+          const savedPath = await transferFile(outputPath, result.outputFilename, target, (percent) => {
             io.emit(`transfer:${jobId}`, {
               fileName: result.outputFilename,
               targetType: target.type,
               percent,
             });
           });
+          if (target.type === 'local' && savedPath) {
+            result.savedPath = savedPath;
+          }
         } catch (err) {
           io.emit(`error:${jobId}`, {
             message: `전송 실패 (${target.type}): ${err.message}`,
@@ -195,6 +198,70 @@ app.get('/api/output/:filename', (req, res) => {
   const filePath = path.join(OUTPUT_DIR, filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
   res.download(filePath);
+});
+
+// 폴더 탐색 API
+app.get('/api/browse-folders', (req, res) => {
+  const reqPath = req.query.path || '';
+  try {
+    // 루트: 드라이브 목록 반환
+    if (!reqPath) {
+      const drives = [];
+      for (let i = 65; i <= 90; i++) {
+        const drive = String.fromCharCode(i) + ':\\';
+        try { fs.accessSync(drive); drives.push({ name: drive, path: drive, type: 'drive' }); } catch {}
+      }
+      // 바탕화면, 다운로드 등 빠른 접근
+      const home = require('os').homedir();
+      const quickAccess = [
+        { name: '바탕화면', path: path.join(home, 'Desktop') },
+        { name: '다운로드', path: path.join(home, 'Downloads') },
+        { name: '문서', path: path.join(home, 'Documents') },
+        { name: '비디오', path: path.join(home, 'Videos') },
+      ].filter((q) => { try { fs.accessSync(q.path); return true; } catch { return false; } })
+       .map((q) => ({ ...q, type: 'quick' }));
+      return res.json({ current: '', folders: [...quickAccess, ...drives] });
+    }
+
+    const absPath = path.resolve(reqPath);
+    const entries = fs.readdirSync(absPath, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '$Recycle.Bin' && e.name !== 'System Volume Information')
+      .map((e) => ({ name: e.name, path: path.join(absPath, e.name), type: 'folder' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const parent = path.dirname(absPath);
+    res.json({ current: absPath, parent: parent !== absPath ? parent : '', folders: entries });
+  } catch (err) {
+    res.status(400).json({ error: err.message, folders: [] });
+  }
+});
+
+// Windows 네이티브 폴더 선택 대화상자
+app.get('/api/pick-folder', (req, res) => {
+  const { execSync } = require('child_process');
+  try {
+    const ps = `
+      Add-Type -AssemblyName System.Windows.Forms
+      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+      $dialog.Description = '출력 폴더를 선택하세요'
+      $dialog.ShowNewFolderButton = $true
+      if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath } else { '' }
+    `;
+    const result = execSync(`powershell -Command "${ps.replace(/\n/g, ' ')}"`, { encoding: 'utf8', timeout: 60000 }).trim();
+    if (result) {
+      res.json({ path: result });
+    } else {
+      res.json({ path: '', cancelled: true });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 기본 다운로드 경로 반환
+app.get('/api/default-path', (req, res) => {
+  const home = require('os').homedir();
+  const downloads = path.join(home, 'Downloads');
+  res.json({ path: fs.existsSync(downloads) ? downloads : home });
 });
 
 if (fs.existsSync(CLIENT_DIST)) {

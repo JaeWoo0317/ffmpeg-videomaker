@@ -116,7 +116,7 @@ function App() {
     cleanupListeners();
 
     setConverting(true);
-    setProgress(null);
+    setProgress({ fileName: '준비 중...', taskType: 'video', filePercent: 0, overallPercent: 0 });
     setTransferProgress(null);
     setResults([]);
     setErrors([]);
@@ -134,7 +134,7 @@ function App() {
     socket.on(`done:${jobId}`, (data) => {
       setResults(data.results);
       setConverting(false);
-      setProgress(null);
+      setProgress({ fileName: '완료!', taskType: 'done', filePercent: 100, overallPercent: 100 });
       setTransferProgress(null);
     });
     socket.on(`error:${jobId}`, (data) => {
@@ -149,6 +149,18 @@ function App() {
     const res = await fetch('/api/upload-asset', { method: 'POST', body: formData });
     const data = await res.json();
     return { name: data.originalName, serverFilename: data.serverFilename };
+  };
+
+  const handleRemoveFile = (index) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleClearFiles = () => {
+    setFiles([]);
+    setUploadedFiles([]);
+    setResults([]);
+    setErrors([]);
   };
 
   const applyPreset = (preset) => {
@@ -167,7 +179,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        <FileUpload onUpload={handleUpload} files={files} uploading={uploading} />
+        <FileUpload onUpload={handleUpload} files={files} uploading={uploading} onRemoveFile={!converting ? handleRemoveFile : null} />
 
         {uploadedFiles.length > 0 && (
           <>
@@ -225,45 +237,70 @@ function App() {
 
             <OutputTargets settings={settings} setSettings={setSettings} />
 
-            <section className="section">
-              <button className="btn convert" onClick={handleConvert} disabled={converting}>
+            <section className="section" style={{ display: 'flex', gap: 12 }}>
+              <button className="btn convert" onClick={handleConvert} disabled={converting} style={{ flex: 1 }}>
                 {converting ? '변환 중...' : '변환 시작'}
+              </button>
+              <button className="btn" onClick={handleClearFiles} disabled={converting} style={{ background: '#555', minWidth: 80 }}>
+                초기화
               </button>
             </section>
 
-            {progress && (
-              <ProgressBar
-                label={`${progress.fileName} - ${progress.taskType === 'video' ? '영상 변환' : 'MP3 추출'}`}
-                percent={progress.filePercent}
-                overall={progress.overallPercent}
-              />
-            )}
+            {(progress || results.length > 0 || errors.length > 0) && (
+              <div className="progress-modal-overlay">
+                <div className="progress-modal">
+                  <div className="progress-modal-header">
+                    <h3>{results.length > 0 ? '변환 완료' : '변환 진행 중'}</h3>
+                    {!converting && (
+                      <button className="btn-close" onClick={() => { setProgress(null); setTransferProgress(null); setErrors([]); }}>✕</button>
+                    )}
+                  </div>
 
-            {transferProgress && (
-              <ProgressBar
-                label={`전송: ${transferProgress.fileName} (${transferProgress.targetType})`}
-                percent={transferProgress.percent}
-              />
-            )}
+                  <div className="progress-modal-body">
+                    {progress && (
+                      <ProgressBar
+                        label={`${progress.fileName} - ${progress.taskType === 'video' ? '영상 변환' : progress.taskType === 'done' ? '완료' : 'MP3 추출'}`}
+                        percent={progress.filePercent}
+                        overall={progress.overallPercent}
+                      />
+                    )}
 
-            {errors.length > 0 && (
-              <div className="error-msg">
-                {errors.map((e, i) => <div key={i}>{e}</div>)}
+                    {transferProgress && (
+                      <ProgressBar
+                        label={`전송: ${transferProgress.fileName} (${transferProgress.targetType})`}
+                        percent={transferProgress.percent}
+                      />
+                    )}
+
+                    {errors.length > 0 && (
+                      <div className="error-msg">
+                        {errors.map((e, i) => <div key={i}>{e}</div>)}
+                      </div>
+                    )}
+
+                    {results.length > 0 && (
+                      <div className="results">
+                        <div className="results-header">
+                          <span className="results-icon">✅</span>
+                          <h2>변환 완료!</h2>
+                          <span className="results-count">{results.length}개 파일</span>
+                        </div>
+                        <ul>
+                          {results.map((r, i) => (
+                            <li key={i}>
+                              <div className="result-info">
+                                <span>{r.originalName} → {r.outputFilename}</span>
+                                {r.savedPath && <span className="saved-path" title={r.savedPath}>저장 위치: {r.savedPath}</span>}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                        <button className="btn convert" style={{ marginTop: 16, width: '100%' }} onClick={() => { setProgress(null); setTransferProgress(null); setErrors([]); setResults([]); }}>닫기</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
-
-            {results.length > 0 && (
-              <section className="section results">
-                <h2>완료</h2>
-                <ul>
-                  {results.map((r, i) => (
-                    <li key={i}>
-                      <span>{r.originalName} → {r.outputFilename}</span>
-                      <a href={`/api/output/${r.outputFilename}`} download className="btn download">다운로드</a>
-                    </li>
-                  ))}
-                </ul>
-              </section>
             )}
           </>
         )}

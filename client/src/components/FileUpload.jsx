@@ -6,7 +6,7 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export default function FileUpload({ onUpload, files, uploading }) {
+export default function FileUpload({ onUpload, files, uploading, onRemoveFile }) {
   const inputRef = useRef();
   const [dragging, setDragging] = useState(false);
 
@@ -60,6 +60,13 @@ export default function FileUpload({ onUpload, files, uploading }) {
             <li key={i}>
               <span>{f.name}</span>
               <span className="file-size">{formatSize(f.size)}</span>
+              {onRemoveFile && (
+                <button
+                  className="btn-remove-file"
+                  onClick={() => onRemoveFile(i)}
+                  title="파일 제거"
+                >✕</button>
+              )}
             </li>
           ))}
         </ul>

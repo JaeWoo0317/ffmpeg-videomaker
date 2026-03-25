@@ -26,9 +26,13 @@ function copyWithProgress(filePath, destPath, onProgress) {
 }
 
 async function transferToLocal(filePath, filename, target, onProgress) {
-  const destDir = sanitizePath(target.path) || path.join(process.cwd(), 'output');
+  const home = require('os').homedir();
+  const defaultDownloads = path.join(home, 'Downloads');
+  const destDir = sanitizePath(target.path) || (fs.existsSync(defaultDownloads) ? defaultDownloads : path.join(process.cwd(), 'output'));
   fs.mkdirSync(destDir, { recursive: true });
-  await copyWithProgress(filePath, path.resolve(destDir, filename), onProgress);
+  const destPath = path.resolve(destDir, filename);
+  await copyWithProgress(filePath, destPath, onProgress);
+  return destPath;
 }
 
 async function transferToFtp(filePath, filename, target, onProgress) {
@@ -96,7 +100,8 @@ async function transferFile(filePath, filename, target, onProgress) {
   const handlers = { local: transferToLocal, ftp: transferToFtp, sftp: transferToSftp, share: transferToShare };
   const handler = handlers[target.type];
   if (!handler) throw new Error(`Unknown transfer type: ${target.type}`);
-  return handler(filePath, filename, target, onProgress);
+  const result = await handler(filePath, filename, target, onProgress);
+  return result; // local returns saved path
 }
 
 module.exports = { transferFile };

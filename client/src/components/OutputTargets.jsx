@@ -1,4 +1,119 @@
+import { useState, useEffect } from 'react';
+
+function TreeNode({ node, onSelect, onClose }) {
+  const [expanded, setExpanded] = useState(false);
+  const [children, setChildren] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    if (expanded) { setExpanded(false); return; }
+    if (children === null) {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/browse-folders?path=${encodeURIComponent(node.path)}`);
+        const data = await res.json();
+        setChildren((data.folders || []).filter((f) => f.type === 'folder'));
+      } catch { setChildren([]); }
+      setLoading(false);
+    }
+    setExpanded(true);
+  };
+
+  return (
+    <div className="tree-node">
+      <div className="tree-row" onClick={toggle}>
+        <span className="tree-arrow">{loading ? '⏳' : expanded ? '▼' : '▶'}</span>
+        <span className={`tree-icon-box ${expanded ? 'open' : ''} ${node.type}`}>
+          {node.type === 'drive' ? '🖴' : ''}
+        </span>
+        <span className="tree-label">{node.type === 'quick' ? node.name : node.name}</span>
+        <button className="btn tree-select-btn" onClick={(e) => { e.stopPropagation(); onSelect(node.path); onClose(); }}>선택</button>
+      </div>
+      {expanded && children && children.length > 0 && (
+        <div className="tree-children">
+          {children.map((child, i) => (
+            <TreeNode key={i} node={child} onSelect={onSelect} onClose={onClose} />
+          ))}
+        </div>
+      )}
+      {expanded && children && children.length === 0 && (
+        <div className="tree-children"><div className="tree-empty">하위 폴더 없음</div></div>
+      )}
+    </div>
+  );
+}
+
+function FolderBrowser({ currentPath, onSelect, onClose }) {
+  const [roots, setRoots] = useState([]);
+  const [selected, setSelected] = useState(currentPath || '');
+
+  useEffect(() => {
+    fetch('/api/browse-folders?path=').then((r) => r.json()).then((data) => {
+      setRoots(data.folders || []);
+    }).catch(() => {});
+  }, []);
+
+  const handleSelect = (p) => { setSelected(p); onSelect(p); };
+
+  return (
+    <div className="folder-browser-overlay" onClick={onClose}>
+      <div className="folder-browser" onClick={(e) => e.stopPropagation()}>
+        <div className="folder-browser-header">
+          <h3>📂 폴더 선택</h3>
+          <button className="btn-close" onClick={onClose}>✕</button>
+        </div>
+
+        {selected && (
+          <div className="folder-browser-path">
+            <span className="path-text" title={selected}>선택: {selected}</span>
+          </div>
+        )}
+
+        <div className="folder-tree">
+          {roots.length === 0 && <div className="folder-loading">로딩 중...</div>}
+          {roots.map((node, i) => (
+            <TreeNode key={i} node={node} onSelect={handleSelect} onClose={onClose} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OutputTargets({ settings, setSettings }) {
+  const [showBrowser, setShowBrowser] = useState(null);
+
+  useEffect(() => {
+    // 로컬 경로 기본값을 다운로드 폴더로 설정
+    const localTarget = settings.targets.find((t) => t.type === 'local');
+    if (localTarget && !localTarget.path) {
+      fetch('/api/default-path').then((r) => r.json()).then((data) => {
+        const idx = settings.targets.findIndex((t) => t.type === 'local');
+        if (idx >= 0) {
+          setSettings((s) => {
+            const targets = [...s.targets];
+            targets[idx] = { ...targets[idx], path: data.path };
+            return { ...s, targets };
+          });
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
+  const [picking, setPicking] = useState(false);
+
+  const pickNativeFolder = async (targetIndex) => {
+    setPicking(true);
+    try {
+      const res = await fetch('/api/pick-folder');
+      const data = await res.json();
+      if (data.path) {
+        updateTarget(targetIndex, 'path', data.path);
+      }
+    } catch {}
+    setPicking(false);
+  };
+
   const updateTarget = (index, key, value) => {
     setSettings((s) => {
       const targets = [...s.targets];
@@ -43,16 +158,17 @@ export default function OutputTargets({ settings, setSettings }) {
                 <>
                   <div className="form-row">
                     <label>출력 경로</label>
-                    <input
-                      type="text"
-                      placeholder="비워두면 브라우저 다운로드"
-                      value={target.path}
-                      onChange={(e) => updateTarget(i, 'path', e.target.value)}
-                    />
+                    <div style={{ display: 'flex', gap: 8, flex: 1 }}>
+                      <input
+                        type="text"
+                        placeholder="경로를 입력하거나 폴더 찾기를 누르세요"
+                        value={target.path}
+                        onChange={(e) => updateTarget(i, 'path', e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <button className="btn preset" onClick={() => setShowBrowser(i)}>📂 폴더 찾기</button>
+                    </div>
                   </div>
-                  <p style={{ fontSize: 12, color: '#666', paddingLeft: 24, marginTop: -4 }}>
-                    {target.path ? `${target.path} 경로에 저장됩니다` : '경로를 비워두면 변환 후 브라우저에서 다운로드합니다'}
-                  </p>
                 </>
               )}
 
@@ -119,18 +235,30 @@ export default function OutputTargets({ settings, setSettings }) {
               {target.type === 'share' && (
                 <div className="form-row">
                   <label>공유 폴더 경로</label>
-                  <input
-                    type="text"
-                    placeholder="\\server\share\folder"
-                    value={target.path}
-                    onChange={(e) => updateTarget(i, 'path', e.target.value)}
-                  />
+                  <div style={{ display: 'flex', gap: 8, flex: 1 }}>
+                    <input
+                      type="text"
+                      placeholder="\\server\share\folder"
+                      value={target.path}
+                      onChange={(e) => updateTarget(i, 'path', e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn preset" onClick={() => setShowBrowser(i)}>📂 폴더 찾기</button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         )
       ))}
+
+      {showBrowser !== null && (
+        <FolderBrowser
+          currentPath={settings.targets[showBrowser]?.path || ''}
+          onSelect={(p) => updateTarget(showBrowser, 'path', p)}
+          onClose={() => setShowBrowser(null)}
+        />
+      )}
     </section>
   );
 }

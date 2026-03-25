@@ -248,6 +248,11 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
     videoFilters.push(`subtitles='${subPath}':force_style='FontSize=${fontSize}${posStyle}'`);
   }
 
+  // pixel format 보장 (h264/h265는 yuv420p 필요)
+  if (codec !== 'copy' && !['vp9', 'av1', 'prores'].includes(codec)) {
+    videoFilters.push('format=yuv420p');
+  }
+
   // 필터 적용: 워터마크 있으면 filter_complex, 없으면 -vf
   if (hasWatermark) {
     const opacity = settings.watermarkOpacity ?? 0.7;
@@ -261,8 +266,9 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
     const overlayPos = posMap[settings.watermarkPosition] || posMap['bottom-right'];
 
     // filter_complex: [0:v] 비디오필터 [base]; [1:v] 투명도 [wm]; [base][wm] overlay [out]
+    // format=yuv420p는 이미 videoFilters에 포함되어 있으므로 별도 추가 불필요
     const baseFilters = videoFilters.length > 0 ? videoFilters.join(',') + ',' : '';
-    const fc = `[0:v]${baseFilters}format=yuv420p[base];[1:v]format=rgba,colorchannelmixer=aa=${opacity}[wm];[base][wm]${overlayPos}[out]`;
+    const fc = `[0:v]${baseFilters.replace('format=yuv420p,', '').replace(',format=yuv420p', '')}format=yuv420p[base];[1:v]format=rgba,colorchannelmixer=aa=${opacity}[wm];[base][wm]${overlayPos}[out]`;
     args.push('-filter_complex', fc, '-map', '[out]', '-map', '0:a?');
   } else if (videoFilters.length > 0) {
     args.push('-vf', videoFilters.join(','));
@@ -366,6 +372,9 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
   }
 
   args.push(outputPath);
+
+  // 디버그 로그: 실제 FFmpeg 명령어 출력
+  console.log('[FFmpeg CMD]', 'ffmpeg -y', args.join(' '));
 
   await runFFmpeg(args, onProgress, effectiveDuration);
 }
