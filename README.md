@@ -1,190 +1,203 @@
-# FFmpeg VideoMaker
+# 🎬 FFmpeg VideoMaker
 
-FFmpeg 기반 영상 변환 웹 앱입니다.
-영상 파일을 다양한 해상도/비트레이트로 변환하고, MP3 오디오를 추출하며, 변환된 파일을 여러 대상으로 전송할 수 있습니다.
-
-FFmpeg을 CLI subprocess로 호출하는 방식이므로 라이선스 제약 없이 자유롭게 사용할 수 있습니다.
+> 영상 파일을 쉽게 변환하는 웹 프로그램입니다.
+> FFmpeg을 CLI subprocess로 호출하므로 **라이선스 제약 없이** 자유롭게 사용할 수 있습니다.
 
 ---
 
-## 주요 기능
+## ✨ 이런 것들을 할 수 있어요
 
-### 영상 변환
-- **입력 포맷**: MOV, MP4, AVI, MKV 등 FFmpeg이 지원하는 모든 영상
-- **해상도 프리셋**: 원본 유지 / 4K (3840x2160) / 1080p / 720p / 480p
-- **사용자 정의 해상도**: 가로/세로 직접 입력, 종횡비 잠금 옵션
-- **비트레이트 모드**: CRF (품질 우선) / CBR (고정) / VBR (가변)
-- **CRF 슬라이더**: 0~51 범위, 실시간 품질 레벨 표시
-- **인코딩 속도**: ultrafast ~ veryslow 선택
-
-### 프리셋 (원클릭 설정)
-- **고화질**: 원본 해상도, CRF 18, 오디오 256kbps
-- **저화질**: 720p, CRF 28, 오디오 128kbps
-- 프리셋 적용 후 세부값 수동 조정 가능
-
-### MP3 오디오 추출
-- 영상에서 오디오만 MP3로 추출
-- 오디오 비트레이트 선택: 64k / 128k / 192k / 256k / 320k
-
-### GPU 하드웨어 가속
-- 서버 시작 시 실제 인코딩 테스트로 GPU 지원 여부 자동 감지
-- NVIDIA NVENC / Intel QSV / AMD AMF 지원
-- GPU 미지원 시 자동으로 CPU(libx264) 폴백
-
-### 파일 크기 제한
-- 목표 파일 크기(MB) 설정 시 비트레이트 자동 계산
-- 영상 길이 기반으로 최적 비트레이트 산출
-
-### 다중 출력 대상 (동시 전송 가능)
-| 대상 | 설명 |
+| 기능 | 설명 |
 |------|------|
-| **로컬 저장** | 서버의 지정 폴더에 저장 |
-| **FTP 서버** | FTP/FTPS(TLS) 업로드 |
-| **SFTP 서버** | SSH 기반 파일 전송 (비밀번호/키파일 인증) |
-| **공유 폴더** | Windows UNC 경로 (예: `\\server\share`) |
-
-### 실시간 진행률
-- Socket.IO로 변환/전송 진행률 실시간 표시
-- 파일별 진행률 + 전체 진행률 동시 표시
-
----
-
-## 아키텍처
-
-```
-브라우저 (React)  <── Socket.IO ──>  Express 서버 (Node.js)
-     |                                    |
-     |  파일 업로드 (multer)              |  FFmpeg 변환 (child_process)
-     |  설정 전송 (REST API)              |  진행률 파싱 -> Socket.IO
-     |  진행률 수신 (Socket.IO)           |  파일 전송 (FTP/SFTP/로컬/공유폴더)
-```
+| 영상 변환 | MOV, MP4, AVI, MKV → 다양한 해상도/코덱으로 변환 |
+| 코덱 선택 | H.264, H.265(HEVC), VP9, AV1, MPEG-4 등 |
+| 오디오 추출 | 영상에서 MP3 오디오만 뽑기 |
+| 오디오 코덱 | AAC, MP3, Opus, FLAC, AC3 등 선택 |
+| 자막 삽입 | SRT/ASS 자막 파일을 영상에 합치기 |
+| 워터마크 | 로고/이미지를 영상 위에 올리기 (위치/크기 조절) |
+| 구간 자르기 | 시작~끝 시간 설정으로 원하는 부분만 추출 |
+| 크롭 | 영상의 원하는 영역만 잘라내기 |
+| GPU 가속 | NVIDIA NVENC / Intel QSV / AMD AMF 자동 감지 |
+| 다중 전송 | 로컬 저장 / FTP / SFTP / 공유 폴더 동시 전송 |
+| 프로파일 | Baseline / Main / High / High 10 선택 |
+| 리사이즈 필터 | Bilinear / Bicubic / Lanczos / Spline 등 |
+| FPS 설정 | 24fps(영화) / 30fps / 60fps / 사용자 정의 |
+| 여러 파일 동시 변환 | 최대 20개 파일 순차 변환 + 진행률 표시 |
 
 ---
 
-## 설치 방법
+## 🖥️ 설치하기 (처음부터 차근차근)
 
-### 1. 사전 요구사항
-
-- **Node.js** v18 이상: https://nodejs.org/
-- **FFmpeg**: 아래 방법 중 하나로 설치
-
-```bash
-# Windows (winget)
-winget install ffmpeg
-
-# Windows (수동 설치)
-# https://www.gyan.dev/ffmpeg/builds/ 에서 다운로드 후 PATH에 추가
-
-# macOS
-brew install ffmpeg
-
-# Ubuntu/Debian
-sudo apt install ffmpeg
-```
-
-### 2. 프로젝트 설치
-
-```bash
-# 저장소 클론
-git clone https://github.com/JaeWoo0317/ffmpeg-videomaker.git
-cd ffmpeg-videomaker
-
-# 서버 의존성 설치
-cd server
-npm install
-cd ..
-
-# 클라이언트 의존성 설치
-cd client
-npm install
-cd ..
-
-# 클라이언트 빌드 (프로덕션용)
-cd client
-npx vite build
-cd ..
-```
-
-### 3. 실행
-
-```bash
-# 방법 1: 직접 실행
-cd server
-node index.js
-
-# 방법 2: Windows - start.bat 더블클릭
-```
-
-브라우저에서 **http://localhost:4000** 접속
+> **필요한 것**: Windows 컴퓨터, 인터넷 연결
+>
+> 아래 순서대로 따라하면 됩니다. 어렵지 않아요!
 
 ---
 
-## 사용 방법
+### 📌 STEP 1. Node.js 설치하기
+
+Node.js는 이 프로그램을 실행하는 데 필요합니다.
+
+1. 크롬이나 엣지 브라우저를 엽니다
+2. 주소창에 아래 주소를 입력하고 Enter를 누릅니다
+   ```
+   https://nodejs.org/
+   ```
+3. 화면에 초록색 버튼 2개가 보입니다 → **왼쪽 LTS 버튼**을 클릭합니다
+4. 다운로드된 파일(예: `node-v22.x.x-x64.msi`)을 **더블클릭**합니다
+5. 설치 창이 뜨면 계속 **Next** → **Next** → **Install** → **Finish** 클릭합니다
+   - 아무것도 바꾸지 말고 그냥 다음만 누르면 됩니다!
+
+#### ✅ 설치 확인하기
+
+6. 키보드에서 **Windows키 + R**을 동시에 누릅니다
+7. 작은 창이 뜨면 `powershell` 이라고 입력하고 **확인** 클릭
+8. 파란색 창(PowerShell)이 뜨면 아래를 입력하고 Enter:
+   ```
+   node -v
+   ```
+9. `v22.x.x` 같은 숫자가 나오면 **성공!** 🎉
+
+---
+
+### 📌 STEP 2. FFmpeg 설치하기
+
+FFmpeg은 영상을 변환하는 도구입니다.
+
+1. STEP 1에서 열었던 **PowerShell 파란 창**을 그대로 사용합니다
+   - 닫았다면 **Windows키 + R** → `powershell` → 확인
+2. 아래 명령어를 **복사**해서 PowerShell에 **붙여넣기**(마우스 우클릭)하고 Enter:
+   ```
+   winget install Gyan.FFmpeg
+   ```
+3. 약관 동의를 물어보면 `Y` 입력하고 Enter
+4. 설치가 끝나면 **PowerShell을 닫고** → 다시 열기 (Windows키 + R → powershell → 확인)
+5. 아래를 입력하고 Enter:
+   ```
+   ffmpeg -version
+   ```
+6. `ffmpeg version 7.x.x` 같은 글자가 나오면 **성공!** 🎉
+
+> **winget이 안 되는 경우 (수동 설치)**
+>
+> 1. 브라우저에서 `https://www.gyan.dev/ffmpeg/builds/` 접속
+> 2. **ffmpeg-release-essentials.zip** 다운로드
+> 3. 압축 풀고 `bin` 폴더 위치 확인 (예: `C:\ffmpeg\bin`)
+> 4. **Windows키** → "환경 변수" 검색 → "시스템 환경 변수 편집" 클릭
+> 5. "환경 변수" 버튼 → **Path** 선택 → "편집" → "새로 만들기"
+> 6. `bin` 폴더 경로를 붙여넣기 → 확인 → 확인
+
+---
+
+### 📌 STEP 3. 프로그램 다운로드하기
+
+#### 방법 A: ZIP으로 다운로드 (가장 쉬움)
+
+1. 브라우저에서 아래 주소로 접속합니다:
+   ```
+   https://github.com/JaeWoo0317/ffmpeg-videomaker
+   ```
+2. 초록색 **Code** 버튼 클릭 → **Download ZIP** 클릭
+3. 다운로드된 ZIP 파일을 **바탕화면**에 압축 해제합니다
+4. 압축 해제된 폴더 이름을 `ffmpeg-videomaker`로 바꿉니다
+
+#### 방법 B: Git으로 다운로드 (Git 설치 필요)
+
+1. Git이 없다면 `https://git-scm.com/` 에서 설치 (Next만 계속 클릭)
+2. PowerShell에서:
+   ```
+   cd ~/Desktop
+   git clone https://github.com/JaeWoo0317/ffmpeg-videomaker.git
+   ```
+
+---
+
+### 📌 STEP 4. 프로그램 설치하기
+
+1. 파일 탐색기에서 `ffmpeg-videomaker` 폴더를 엽니다
+2. **`setup.bat`** 파일을 찾아서 **더블클릭**합니다
+3. 검은 창이 뜨고 자동으로 설치가 진행됩니다:
+   - ✅ Node.js 확인
+   - ✅ FFmpeg 확인
+   - ✅ 서버 파일 다운로드
+   - ✅ 클라이언트 파일 다운로드
+   - ✅ 화면 빌드
+4. **"설치 완료!"** 메시지가 나올 때까지 기다립니다 (1~3분 소요)
+
+> **setup.bat 없이 직접 설치하기 (PowerShell에서):**
+> ```
+> cd ~/Desktop/ffmpeg-videomaker
+> cd server
+> npm install
+> cd ../client
+> npm install
+> npx vite build
+> cd ..
+> ```
+
+---
+
+### 📌 STEP 5. 프로그램 실행하기
+
+1. `ffmpeg-videomaker` 폴더에서 **`start.bat`**을 **더블클릭**합니다
+2. 검은 창이 뜨고 `Server running on http://localhost:4000` 이 보입니다
+3. 브라우저를 열고 주소창에 입력합니다:
+   ```
+   http://localhost:4000
+   ```
+4. **VideoMaker** 화면이 나오면 **성공!** 🎉
+
+> ⚠️ **중요**: 검은 창(터미널)을 닫으면 프로그램도 꺼집니다! 사용하는 동안 열어두세요.
+
+---
+
+## 📖 사용 방법
 
 1. 브라우저에서 `http://localhost:4000` 접속
-2. 영상 파일을 **드래그앤드롭** 또는 **클릭하여 선택**
-3. **프리셋** (고화질/저화질) 선택 또는 세부 설정 조정
-   - 해상도, 비트레이트, CRF, 인코딩 속도 등
-4. **출력 대상** 설정 (로컬/FTP/SFTP/공유폴더)
+2. 영상 파일을 **드래그앤드롭** 하거나 **클릭해서 선택**
+3. **상세 설정** 버튼을 클릭하면 팝업창이 열립니다
+   - **영상**: 코덱, 해상도, FPS, 비트레이트, 프로파일, 리사이즈 필터
+   - **오디오**: 오디오 코덱, 비트레이트, 샘플레이트, 채널
+   - **구간**: 시작/끝 시간 설정
+   - **자막**: SRT/ASS 자막 파일 업로드
+   - **워터마크**: 로고 이미지 업로드 + 위치/크기 조절
+   - **크롭**: 영상 잘라내기 영역 설정
+4. **출력 대상** 선택 (로컬 저장 / FTP / SFTP / 공유 폴더)
 5. **변환 시작** 클릭
-6. 진행률 바에서 실시간 진행 상태 확인
-7. 완료 후 **다운로드** 버튼으로 파일 받기
+6. 진행률 바로 실시간 확인
+7. 완료 후 **다운로드** 클릭
 
 ---
 
-## 프로젝트 구조
+## 📁 프로젝트 구조
 
 ```
 ffmpeg-videomaker/
-├── package.json               # 루트 (concurrently 스크립트)
-├── start.bat                  # Windows 간편 실행
+├── setup.bat                  # 원클릭 설치
+├── start.bat                  # 원클릭 실행
 ├── server/
-│   ├── package.json
-│   ├── index.js               # Express 서버 + Socket.IO + API
-│   ├── ffmpeg.js              # FFmpeg 변환/추출/GPU 감지
-│   ├── transfer.js            # 파일 전송 (로컬/FTP/SFTP/공유폴더)
-│   ├── uploads/               # 임시 업로드 폴더 (자동 생성)
-│   └── output/                # 변환 결과 폴더 (자동 생성)
+│   ├── index.js               # Express 서버 + Socket.IO
+│   ├── ffmpeg.js              # FFmpeg 변환/GPU 감지
+│   └── transfer.js            # 파일 전송 (로컬/FTP/SFTP)
 └── client/
-    ├── package.json
-    ├── vite.config.js
-    ├── index.html
     └── src/
         ├── App.jsx            # 메인 앱
-        ├── App.css            # 스타일
-        ├── main.jsx           # 엔트리포인트
         └── components/
-            ├── FileUpload.jsx     # 파일 업로드 (드래그앤드롭)
-            ├── VideoSettings.jsx  # 영상 설정 (해상도/비트레이트)
-            ├── AudioSettings.jsx  # 오디오 설정
-            ├── OutputTargets.jsx  # 출력 대상 설정
-            └── ProgressBar.jsx    # 진행률 표시
+            ├── FileUpload.jsx      # 파일 업로드
+            ├── SettingsModal.jsx   # 상세 설정 팝업
+            ├── VideoSettings.jsx   # 영상 설정
+            ├── AudioSettings.jsx   # 오디오 설정
+            ├── TrimSettings.jsx    # 구간 설정
+            ├── SubtitleSettings.jsx # 자막 설정
+            ├── WatermarkSettings.jsx # 워터마크 설정
+            ├── CropSettings.jsx    # 크롭 설정
+            ├── OutputTargets.jsx   # 출력 대상
+            └── ProgressBar.jsx     # 진행률 표시
 ```
 
 ---
 
-## API 엔드포인트
-
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| POST | `/api/upload` | 영상 파일 업로드 (multipart/form-data) |
-| POST | `/api/convert` | 변환 시작 (설정 JSON 포함) |
-| GET | `/api/status/:jobId` | 작업 상태 조회 |
-| GET | `/api/gpu-check` | GPU 하드웨어 가속 지원 여부 |
-| GET | `/api/output/:filename` | 변환된 파일 다운로드 |
-
-### Socket.IO 이벤트
-
-| 이벤트 | 방향 | 설명 |
-|--------|------|------|
-| `progress:{jobId}` | 서버 -> 클라이언트 | 변환 진행률 |
-| `transfer:{jobId}` | 서버 -> 클라이언트 | 전송 진행률 |
-| `done:{jobId}` | 서버 -> 클라이언트 | 변환 완료 |
-| `error:{jobId}` | 서버 -> 클라이언트 | 에러 발생 |
-
----
-
-## 기술 스택
+## 🛠️ 기술 스택
 
 | 구분 | 기술 |
 |------|------|
@@ -197,23 +210,19 @@ ffmpeg-videomaker/
 
 ---
 
-## 문제 해결
+## ❓ 문제가 생겼을 때
 
-### FFmpeg을 찾을 수 없음
-- `winget install ffmpeg` 실행 후 터미널 재시작
-- 또는 FFmpeg 경로를 시스템 PATH에 수동 추가
-
-### GPU 가속이 감지되지 않음
-- NVIDIA GPU: 드라이버 **570.0 이상** 필요 (FFmpeg 8.x 기준)
-- `nvidia-smi`로 드라이버 버전 확인
-- GPU 미지원 시 자동으로 CPU 인코딩 사용 (기능에 문제 없음)
-
-### 전송 실패 (로컬)
-- 출력 경로에 따옴표(`"`)를 포함하지 마세요
-- 경로 예시: `C:\Users\username\Downloads`
+| 문제 | 해결 방법 |
+|------|-----------|
+| `node -v` 가 안 됨 | Node.js를 다시 설치하세요 |
+| `ffmpeg` 을 찾을 수 없음 | PowerShell을 **닫고 다시 열고** `ffmpeg -version` 확인 |
+| GPU 가속이 안 됨 | NVIDIA 드라이버 업데이트 필요. 없어도 CPU로 정상 작동합니다 |
+| 브라우저에서 접속 안 됨 | `start.bat` 검은 창이 열려있는지 확인 + 주소 `http://localhost:4000` 정확히 입력 |
+| setup.bat 실행 오류 | PowerShell을 **관리자 권한**으로 실행 (우클릭 → 관리자 권한으로 실행) |
+| 변환 중 에러 | 영상 파일이 손상되지 않았는지 확인. 다른 코덱으로 시도해보세요 |
 
 ---
 
-## 라이선스
+## 📜 라이선스
 
-MIT
+MIT License - 자유롭게 사용, 수정, 배포할 수 있습니다.

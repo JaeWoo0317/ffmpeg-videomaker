@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import FileUpload from './components/FileUpload';
-import VideoSettings from './components/VideoSettings';
-import AudioSettings from './components/AudioSettings';
+import SettingsModal from './components/SettingsModal';
 import OutputTargets from './components/OutputTargets';
 import ProgressBar from './components/ProgressBar';
 
@@ -22,6 +21,30 @@ const DEFAULT_SETTINGS = {
   gpuAccel: 'auto',
   gpuEncoder: '',
   maxFileSizeMB: '',
+  scaleFilter: 'bilinear',
+  codec: 'h264',
+  container: 'mp4',
+  profile: 'high',
+  audioCodec: 'aac',
+  subtitleFile: null,
+  subtitleFontSize: 24,
+  subtitlePosition: 'bottom',
+  trimStart: '',
+  trimEnd: '',
+  watermarkFile: null,
+  watermarkPosition: 'bottom-right',
+  watermarkOpacity: 0.7,
+  fps: '',
+  cropEnabled: false,
+  cropWidth: '',
+  cropHeight: '',
+  cropX: '',
+  cropY: '',
+  deinterlace: false,
+  noiseReduction: false,
+  noiseStrength: 5,
+  audioChannels: 'stereo',
+  audioSampleRate: 48000,
   targets: [
     { type: 'local', enabled: true, path: '' },
     { type: 'ftp', enabled: false, host: '', port: 21, username: '', password: '', remotePath: '', secure: false },
@@ -34,7 +57,9 @@ function App() {
   const [files, setFiles] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [gpuInfo, setGpuInfo] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [progress, setProgress] = useState(null);
   const [transferProgress, setTransferProgress] = useState(null);
   const [results, setResults] = useState([]);
@@ -73,10 +98,17 @@ function App() {
     setFiles(fileList.map((f) => ({ name: f.name, size: f.size })));
     setResults([]);
     setErrors([]);
+    setUploading(true);
 
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-    setUploadedFiles(data.files);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      setUploadedFiles(data.files);
+    } catch (err) {
+      setErrors(['파일 업로드 실패: ' + err.message]);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleConvert = async () => {
@@ -111,10 +143,18 @@ function App() {
     });
   };
 
+  const uploadAsset = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/upload-asset', { method: 'POST', body: formData });
+    const data = await res.json();
+    return { name: data.originalName, serverFilename: data.serverFilename };
+  };
+
   const applyPreset = (preset) => {
     const presets = {
-      high: { outputs: ['high'], resolution: 'original', bitrateMode: 'crf', crf: 18, audioBitrate: 256 },
-      low: { outputs: ['low'], resolution: '720p', bitrateMode: 'crf', crf: 28, audioBitrate: 128 },
+      high: { outputs: ['high'], resolution: 'original', bitrateMode: 'crf', crf: 18, audioBitrate: 256, codec: 'h264', profile: 'high' },
+      low: { outputs: ['low'], resolution: '720p', bitrateMode: 'crf', crf: 28, audioBitrate: 128, codec: 'h264', profile: 'main' },
     };
     if (presets[preset]) setSettings((s) => ({ ...s, ...presets[preset] }));
   };
@@ -127,7 +167,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        <FileUpload onUpload={handleUpload} files={files} />
+        <FileUpload onUpload={handleUpload} files={files} uploading={uploading} />
 
         {uploadedFiles.length > 0 && (
           <>
@@ -154,8 +194,35 @@ function App() {
               </div>
             </section>
 
-            <VideoSettings settings={settings} setSettings={setSettings} gpuInfo={gpuInfo} />
-            <AudioSettings settings={settings} setSettings={setSettings} />
+            <section className="section">
+              <div className="settings-summary">
+                <div className="summary-items">
+                  <span className="summary-tag">{settings.codec.toUpperCase()}</span>
+                  <span className="summary-tag">{settings.container.toUpperCase()}</span>
+                  <span className="summary-tag">{settings.resolution === 'original' ? '원본' : settings.resolution}</span>
+                  {settings.fps && <span className="summary-tag">{settings.fps}fps</span>}
+                  <span className="summary-tag">{settings.bitrateMode === 'crf' ? `CRF ${settings.crf}` : `${settings.videoBitrate}k`}</span>
+                  <span className="summary-tag">{settings.audioCodec.toUpperCase()}</span>
+                  {settings.trimStart && <span className="summary-tag">트림</span>}
+                  {settings.subtitleFile && <span className="summary-tag">자막</span>}
+                  {settings.watermarkFile && <span className="summary-tag">워터마크</span>}
+                  {settings.cropEnabled && <span className="summary-tag">크롭</span>}
+                  {settings.deinterlace && <span className="summary-tag">디인터레이스</span>}
+                  {settings.noiseReduction && <span className="summary-tag">노이즈 제거</span>}
+                </div>
+                <button className="btn settings-btn" onClick={() => setShowSettings(true)}>상세 설정</button>
+              </div>
+            </section>
+
+            <SettingsModal
+              open={showSettings}
+              onClose={() => setShowSettings(false)}
+              settings={settings}
+              setSettings={setSettings}
+              gpuInfo={gpuInfo}
+              uploadAsset={uploadAsset}
+            />
+
             <OutputTargets settings={settings} setSettings={setSettings} />
 
             <section className="section">

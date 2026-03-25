@@ -4,6 +4,7 @@ const os = require('os');
 
 const WINGET_LINKS = path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links');
 const ENV_PATH = `${process.env.PATH};${WINGET_LINKS}`;
+const ASSET_DIR = path.join(__dirname, 'assets');
 
 function runFFmpeg(args, onProgress, duration) {
   return new Promise((resolve, reject) => {
@@ -61,7 +62,6 @@ function getVideoDuration(inputPath) {
 
 function testEncoder(encoder) {
   return new Promise((resolve) => {
-    // 실제로 인코더를 초기화해서 동작하는지 테스트
     const proc = spawn('ffmpeg', [
       '-f', 'lavfi', '-i', 'nullsrc=s=256x256:d=1', '-frames:v', '1',
       '-c:v', encoder, '-f', 'null', '-',
@@ -72,7 +72,6 @@ function testEncoder(encoder) {
 }
 
 async function checkGpuSupport() {
-  // 실제 인코딩 테스트로 GPU 지원 여부 확인
   const [nvenc, qsv, amf] = await Promise.all([
     testEncoder('h264_nvenc'),
     testEncoder('h264_qsv'),
@@ -88,44 +87,195 @@ async function checkGpuSupport() {
   };
 }
 
-async function convertVideo(inputPath, outputPath, settings, onProgress) {
-  const duration = await getVideoDuration(inputPath);
-  const args = ['-i', inputPath];
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+}
 
-  // 해상도 설정
-  const filters = [];
+// FFmpeg 자막 필터용 경로 이스케이프 (Windows)
+function escapeSubtitlePath(p) {
+  return p.replace(/\\/g, '/').replace(/:/g, '\\:');
+}
+
+// CPU 인코더 매핑
+function getCpuEncoder(codec) {
+  const map = {
+    h264: 'libx264',
+    h265: 'libx265',
+    av1: 'libsvtav1',
+    vp9: 'libvpx-vp9',
+    mpeg4: 'mpeg4',
+    prores: 'prores_ks',
+    copy: 'copy',
+  };
+  return map[codec] || 'libx264';
+}
+
+// 오디오 인코더 매핑
+function getAudioEncoder(audioCodec) {
+  const map = {
+    aac: 'aac',
+    mp3: 'libmp3lame',
+    opus: 'libopus',
+    flac: 'flac',
+    ac3: 'ac3',
+    pcm: 'pcm_s16le',
+    copy: 'copy',
+  };
+  return map[audioCodec] || 'aac';
+}
+
+// 컨테이너 확장자
+function getContainerExt(container) {
+  const map = { mp4: '.mp4', mkv: '.mkv', webm: '.webm', mov: '.mov', avi: '.avi' };
+  return map[container] || '.mp4';
+}
+
+// 프로파일 매핑
+function getProfileArg(codec, profile, isGpu) {
+  if (['av1', 'vp9', 'mpeg4', 'prores', 'copy'].includes(codec)) return null;
+
+  if (codec === 'h265') {
+    const h265Map = { baseline: 'main', main: 'main', high: 'main', high10: 'main10' };
+    return h265Map[profile] || 'main';
+  }
+
+  // h264
+  if (isGpu) {
+    const gpuMap = { baseline: 'baseline', main: 'main', high: 'high', high10: 'high' };
+    return gpuMap[profile] || 'high';
+  }
+  return profile || 'high';
+}
+
+async function convertVideo(inputPath, outputPath, settings, onProgress) {
+  const totalDuration = await getVideoDuration(inputPath);
+
+  // 트림 시 유효 길이 계산
+  const trimStartSec = parseTimeToSeconds(settings.trimStart);
+  const trimEndSec = parseTimeToSeconds(settings.trimEnd);
+  let effectiveDuration = totalDuration;
+  if (trimEndSec > 0) effectiveDuration = trimEndSec - trimStartSec;
+  else if (trimStartSec > 0) effectiveDuration = totalDuration - trimStartSec;
+
+  const args = [];
+
+  // 인코더 사전 결정 (hwaccel에 필요)
+  const codec = settings.codec || 'h264';
+  const useGpu = settings.gpuAccel && settings.gpuAccel !== 'cpu';
+  const gpuEncoder = useGpu && settings.gpuEncoder ? settings.gpuEncoder : null;
+  const isNvenc = gpuEncoder && gpuEncoder.includes('nvenc');
+  const isQsv = gpuEncoder && gpuEncoder.includes('qsv');
+  const isAmf = gpuEncoder && gpuEncoder.includes('amf');
+
+  // 하드웨어 디코딩 (-i 앞에 위치해야 함)
+  if (isNvenc) {
+    args.push('-hwaccel', 'cuda');
+  } else if (isQsv) {
+    args.push('-hwaccel', 'qsv');
+  } else if (isAmf) {
+    args.push('-hwaccel', 'd3d11va');
+  }
+
+  // 트림: -ss before -i (input seeking)
+  if (settings.trimStart) {
+    args.push('-ss', settings.trimStart);
+  }
+
+  args.push('-i', inputPath);
+
+  // 트림: -to after -i
+  if (settings.trimEnd) {
+    const endRelative = trimEndSec - trimStartSec;
+    if (endRelative > 0) args.push('-t', String(endRelative));
+  }
+
+  // 워터마크 입력
+  const hasWatermark = settings.watermarkFile?.serverFilename;
+  if (hasWatermark) {
+    const wmPath = path.join(ASSET_DIR, settings.watermarkFile.serverFilename);
+    args.push('-i', wmPath);
+  }
+
+  // 비디오 필터 체인 구축
+  const videoFilters = [];
+
+  // 1. 크롭
+  if (settings.cropEnabled && settings.cropWidth && settings.cropHeight) {
+    const x = settings.cropX || 0;
+    const y = settings.cropY || 0;
+    videoFilters.push(`crop=${settings.cropWidth}:${settings.cropHeight}:${x}:${y}`);
+  }
+
+  // 2. 해상도 (스케일) + 리사이즈 필터
   if (settings.resolution && settings.resolution !== 'original') {
-    const resMap = {
-      '4k': '3840:-2',
-      '1080p': '1920:-2',
-      '720p': '1280:-2',
-      '480p': '854:-2',
-    };
+    const flagsMap = { bilinear: 'bilinear', bicubic: 'bicubic', lanczos: 'lanczos', neighbor: 'neighbor', spline: 'spline' };
+    const flags = flagsMap[settings.scaleFilter] || 'bilinear';
+    const resMap = { '4k': '3840:-2', '1080p': '1920:-2', '720p': '1280:-2', '480p': '854:-2' };
     if (resMap[settings.resolution]) {
-      filters.push(`scale=${resMap[settings.resolution]}`);
+      videoFilters.push(`scale=${resMap[settings.resolution]}:flags=${flags}`);
     } else if (settings.customWidth && settings.customHeight) {
       if (settings.keepAspectRatio) {
-        filters.push(`scale=${settings.customWidth}:-2`);
+        videoFilters.push(`scale=${settings.customWidth}:-2:flags=${flags}`);
       } else {
-        filters.push(`scale=${settings.customWidth}:${settings.customHeight}`);
+        videoFilters.push(`scale=${settings.customWidth}:${settings.customHeight}:flags=${flags}`);
       }
     }
   }
 
-  if (filters.length > 0) {
-    args.push('-vf', filters.join(','));
+  // 3. 디인터레이스
+  if (settings.deinterlace) {
+    videoFilters.push('yadif');
+  }
+
+  // 4. 노이즈 제거
+  if (settings.noiseReduction) {
+    const strength = (settings.noiseStrength || 5) * 1.5;
+    videoFilters.push(`hqdn3d=${strength}`);
+  }
+
+  // 5. 자막 burn-in
+  const hasSubtitle = settings.subtitleFile?.serverFilename;
+  if (hasSubtitle) {
+    const subPath = escapeSubtitlePath(path.join(ASSET_DIR, settings.subtitleFile.serverFilename));
+    const fontSize = settings.subtitleFontSize || 24;
+    // 자막 위치: MarginV로 조절 (bottom=기본, top=상단, center=중앙)
+    const posStyle = settings.subtitlePosition === 'top' ? ',Alignment=6,MarginV=20'
+      : settings.subtitlePosition === 'center' ? ',Alignment=5' : '';
+    videoFilters.push(`subtitles='${subPath}':force_style='FontSize=${fontSize}${posStyle}'`);
+  }
+
+  // 필터 적용: 워터마크 있으면 filter_complex, 없으면 -vf
+  if (hasWatermark) {
+    const opacity = settings.watermarkOpacity ?? 0.7;
+    const posMap = {
+      'top-left': 'overlay=10:10',
+      'top-right': 'overlay=W-w-10:10',
+      'bottom-left': 'overlay=10:H-h-10',
+      'bottom-right': 'overlay=W-w-10:H-h-10',
+      'center': 'overlay=(W-w)/2:(H-h)/2',
+    };
+    const overlayPos = posMap[settings.watermarkPosition] || posMap['bottom-right'];
+
+    // filter_complex: [0:v] 비디오필터 [base]; [1:v] 투명도 [wm]; [base][wm] overlay [out]
+    const baseFilters = videoFilters.length > 0 ? videoFilters.join(',') + ',' : '';
+    const fc = `[0:v]${baseFilters}format=yuv420p[base];[1:v]format=rgba,colorchannelmixer=aa=${opacity}[wm];[base][wm]${overlayPos}[out]`;
+    args.push('-filter_complex', fc, '-map', '[out]', '-map', '0:a?');
+  } else if (videoFilters.length > 0) {
+    args.push('-vf', videoFilters.join(','));
   }
 
   // 인코더 선택
-  const useGpu = settings.gpuAccel && settings.gpuAccel !== 'cpu';
-  const isNvenc = useGpu && settings.gpuEncoder && settings.gpuEncoder.includes('nvenc');
-  const isQsv = useGpu && settings.gpuEncoder && settings.gpuEncoder.includes('qsv');
-  const isAmf = useGpu && settings.gpuEncoder && settings.gpuEncoder.includes('amf');
+  if (codec === 'copy') {
+    // 스트림 복사 - 재인코딩 없음 (필터 무시)
+    args.push('-c:v', 'copy');
+  } else if (gpuEncoder) {
+    args.push('-c:v', gpuEncoder);
 
-  if (useGpu && settings.gpuEncoder) {
-    args.push('-c:v', settings.gpuEncoder);
     if (settings.bitrateMode === 'crf') {
-      // NVENC: -rc vbr -cq 값, QSV: -global_quality 값, AMF: -rc vbr_peak -qp_i/qp_p 값
       if (isNvenc) {
         args.push('-rc', 'vbr', '-cq', String(settings.crf || 23));
       } else if (isQsv) {
@@ -136,57 +286,119 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
     } else {
       args.push('-b:v', `${settings.videoBitrate || 5000}k`);
     }
-    // GPU 인코더별 preset 매핑
+
+    // GPU preset 매핑
     if (isNvenc) {
       const nvencPresetMap = { ultrafast: 'p1', fast: 'p3', medium: 'p4', slow: 'p6', veryslow: 'p7' };
       args.push('-preset', nvencPresetMap[settings.preset] || 'p4');
     } else if (isQsv) {
       args.push('-preset', settings.preset === 'ultrafast' ? 'veryfast' : (settings.preset || 'medium'));
     }
-    // AMF는 preset 생략 (기본값 사용)
   } else {
-    args.push('-c:v', 'libx264');
+    const cpuEncoder = getCpuEncoder(codec);
+    args.push('-c:v', cpuEncoder);
+
     if (settings.bitrateMode === 'crf') {
       args.push('-crf', String(settings.crf || 23));
     } else {
       args.push('-b:v', `${settings.videoBitrate || 5000}k`);
     }
-    args.push('-preset', settings.preset || 'medium');
+    // AV1 (libsvtav1)은 preset 대신 다른 옵션 사용
+    if (codec === 'av1') {
+      const av1PresetMap = { ultrafast: '12', fast: '10', medium: '8', slow: '5', veryslow: '2' };
+      args.push('-preset', av1PresetMap[settings.preset] || '8');
+    } else {
+      args.push('-preset', settings.preset || 'medium');
+    }
+  }
+
+  // 프로파일
+  const profileVal = getProfileArg(codec, settings.profile, !!gpuEncoder);
+  if (profileVal) {
+    args.push('-profile:v', profileVal);
+  }
+
+  // FPS
+  if (settings.fps) {
+    args.push('-r', String(settings.fps));
   }
 
   // 오디오 설정
-  args.push('-c:a', 'aac', '-b:a', `${settings.audioBitrate || 192}k`);
+  const audioEnc = getAudioEncoder(settings.audioCodec);
+  args.push('-c:a', audioEnc);
+  // 비트레이트: copy/flac/pcm에는 불필요
+  if (audioEnc !== 'copy' && audioEnc !== 'flac' && audioEnc !== 'pcm_s16le') {
+    args.push('-b:a', `${settings.audioBitrate || 192}k`);
+  }
 
-  // 파일 크기 제한 (2-pass는 별도 처리가 복잡하므로 비트레이트 계산으로 근사)
-  if (settings.maxFileSizeMB && duration > 0) {
+  // 오디오 채널
+  const channelMap = { mono: '1', stereo: '2', '5.1': '6' };
+  if (settings.audioChannels && channelMap[settings.audioChannels]) {
+    args.push('-ac', channelMap[settings.audioChannels]);
+  }
+
+  // 샘플레이트
+  if (settings.audioSampleRate) {
+    args.push('-ar', String(settings.audioSampleRate));
+  }
+
+  // 파일 크기 제한
+  if (settings.maxFileSizeMB && effectiveDuration > 0) {
     const targetBits = settings.maxFileSizeMB * 8 * 1024 * 1024;
-    const audioBits = (settings.audioBitrate || 192) * 1000 * duration;
-    const videoBitrate = Math.max(100, Math.floor((targetBits - audioBits) / duration / 1000));
-    // 파일 크기 제한이 설정되면 비트레이트 강제 적용
-    const idx = args.indexOf('-crf');
-    if (idx > -1) args.splice(idx, 2);
-    const idx2 = args.indexOf('-cq');
-    if (idx2 > -1) args.splice(idx2, 2);
-    const idx3 = args.indexOf('-b:v');
-    if (idx3 > -1) args.splice(idx3, 2);
+    const audioBits = (settings.audioBitrate || 192) * 1000 * effectiveDuration;
+    const videoBitrate = Math.max(100, Math.floor((targetBits - audioBits) / effectiveDuration / 1000));
+    // CRF/CQ 제거하고 비트레이트 강제 적용
+    const removeArgs = ['-crf', '-cq', '-global_quality', '-b:v'];
+    for (const ra of removeArgs) {
+      const idx = args.indexOf(ra);
+      if (idx > -1) args.splice(idx, 2);
+    }
     args.push('-b:v', `${videoBitrate}k`);
+  }
+
+  // 멀티스레드 (모든 CPU 코어 활용)
+  args.push('-threads', '0');
+
+  // 출력 컨테이너 결정
+  if (codec === 'av1' && outputPath.endsWith('.mp4')) {
+    // AV1은 mp4도 지원하지만 movflags 추가
+    args.push('-movflags', '+faststart');
   }
 
   args.push(outputPath);
 
-  await runFFmpeg(args, onProgress, duration);
+  await runFFmpeg(args, onProgress, effectiveDuration);
 }
 
 async function extractAudio(inputPath, outputPath, settings, onProgress) {
-  const duration = await getVideoDuration(inputPath);
-  const args = [
-    '-i', inputPath,
-    '-vn',
-    '-acodec', 'libmp3lame',
-    '-ab', `${settings.audioBitrate || 192}k`,
-    outputPath,
-  ];
-  await runFFmpeg(args, onProgress, duration);
+  const totalDuration = await getVideoDuration(inputPath);
+  const trimStartSec = parseTimeToSeconds(settings.trimStart);
+  const trimEndSec = parseTimeToSeconds(settings.trimEnd);
+  let effectiveDuration = totalDuration;
+  if (trimEndSec > 0) effectiveDuration = trimEndSec - trimStartSec;
+  else if (trimStartSec > 0) effectiveDuration = totalDuration - trimStartSec;
+
+  const args = [];
+
+  if (settings.trimStart) args.push('-ss', settings.trimStart);
+  args.push('-i', inputPath);
+  if (settings.trimEnd) {
+    const endRelative = trimEndSec - trimStartSec;
+    if (endRelative > 0) args.push('-t', String(endRelative));
+  }
+
+  args.push('-vn', '-acodec', 'libmp3lame', '-ab', `${settings.audioBitrate || 192}k`);
+
+  const channelMap = { mono: '1', stereo: '2', '5.1': '6' };
+  if (settings.audioChannels && channelMap[settings.audioChannels]) {
+    args.push('-ac', channelMap[settings.audioChannels]);
+  }
+  if (settings.audioSampleRate) {
+    args.push('-ar', String(settings.audioSampleRate));
+  }
+
+  args.push(outputPath);
+  await runFFmpeg(args, onProgress, effectiveDuration);
 }
 
 module.exports = { convertVideo, extractAudio, checkGpuSupport };

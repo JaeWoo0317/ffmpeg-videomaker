@@ -26,8 +26,10 @@ if (fs.existsSync(CLIENT_DIST)) {
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const OUTPUT_DIR = path.join(__dirname, 'output');
+const ASSET_DIR = path.join(__dirname, 'assets');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+fs.mkdirSync(ASSET_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -50,6 +52,24 @@ function cleanupJob(jobId) {
 
 // GPU 체크 결과 캐싱 (매 요청마다 인코더 테스트 방지)
 let gpuCache = null;
+
+// 에셋 업로드 (자막, 워터마크 등)
+const assetStorage = multer.diskStorage({
+  destination: ASSET_DIR,
+  filename: (req, file, cb) => {
+    cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+  },
+});
+const assetUpload = multer({ storage: assetStorage, limits: { fileSize: 100 * 1024 * 1024 } });
+
+app.post('/api/upload-asset', assetUpload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+  res.json({
+    originalName: req.file.originalname,
+    serverFilename: req.file.filename,
+    path: req.file.path,
+  });
+});
 
 app.post('/api/upload', upload.array('files', 20), (req, res) => {
   const files = req.files.map((f) => ({
@@ -95,7 +115,9 @@ app.post('/api/convert', async (req, res) => {
       const tasks = [];
 
       if (hasVideoOutput) {
-        const outputFilename = `${baseName}_converted_${ts}.mp4`;
+        const extMap = { mp4: '.mp4', mkv: '.mkv', webm: '.webm', mov: '.mov', avi: '.avi' };
+        const ext = extMap[settings.container] || '.mp4';
+        const outputFilename = `${baseName}_converted_${ts}${ext}`;
         tasks.push({ type: 'video', outputPath: path.join(OUTPUT_DIR, outputFilename), outputFilename });
       }
       if (hasMp3) {

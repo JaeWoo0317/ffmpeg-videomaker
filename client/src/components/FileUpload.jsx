@@ -6,7 +6,7 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export default function FileUpload({ onUpload, files }) {
+export default function FileUpload({ onUpload, files, uploading }) {
   const inputRef = useRef();
   const [dragging, setDragging] = useState(false);
 
@@ -24,15 +24,26 @@ export default function FileUpload({ onUpload, files }) {
   return (
     <div>
       <div
-        className={`upload-zone ${dragging ? 'dragging' : ''}`}
-        onClick={() => inputRef.current.click()}
+        className={`upload-zone ${dragging ? 'dragging' : ''} ${uploading ? 'uploading' : ''}`}
+        onClick={() => !uploading && inputRef.current.click()}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
+        style={uploading ? { cursor: 'wait' } : undefined}
       >
-        <div className="icon">+</div>
-        <p>클릭하거나 파일을 여기에 드래그앤드롭</p>
-        <p style={{ marginTop: 4, fontSize: 12, color: '#666' }}>MOV, MP4, AVI, MKV 지원</p>
+        {uploading ? (
+          <>
+            <div className="upload-spinner" />
+            <p style={{ marginTop: 12 }}>파일 업로드 중...</p>
+            <p style={{ marginTop: 4, fontSize: 12, color: '#666' }}>잠시만 기다려주세요</p>
+          </>
+        ) : (
+          <>
+            <div className="icon">+</div>
+            <p>클릭하거나 파일을 여기에 드래그앤드롭</p>
+            <p style={{ marginTop: 4, fontSize: 12, color: '#666' }}>MOV, MP4, AVI, MKV 지원</p>
+          </>
+        )}
         <input
           ref={inputRef}
           type="file"

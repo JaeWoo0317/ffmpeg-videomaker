@@ -9,8 +9,8 @@ export default function OutputTargets({ settings, setSettings }) {
 
   const labels = {
     local: '로컬 저장',
-    ftp: 'FTP 서버',
-    sftp: 'SFTP 서버',
+    ftp: 'FTP',
+    sftp: 'SFTP',
     share: '공유 폴더',
   };
 
@@ -18,31 +18,42 @@ export default function OutputTargets({ settings, setSettings }) {
     <section className="section">
       <h2>출력 대상</h2>
 
-      {settings.targets.map((target, i) => (
-        <div className="target-group" key={target.type}>
-          <div className="target-header">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={target.enabled}
-                onChange={(e) => updateTarget(i, 'enabled', e.target.checked)}
-              />
-              {labels[target.type]}
-            </label>
-          </div>
+      <div className="target-checks">
+        {settings.targets.map((target, i) => (
+          <label className="checkbox-label" key={target.type}>
+            <input
+              type="checkbox"
+              checked={target.enabled}
+              onChange={(e) => updateTarget(i, 'enabled', e.target.checked)}
+            />
+            {labels[target.type]}
+          </label>
+        ))}
+      </div>
 
-          {target.enabled && (
+      {settings.targets.map((target, i) => (
+        target.enabled && (
+          <div className="target-group" key={target.type}>
+            <div className="target-header">
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{labels[target.type]}</span>
+            </div>
+
             <div className="target-fields">
               {target.type === 'local' && (
-                <div className="form-row">
-                  <label>출력 경로</label>
-                  <input
-                    type="text"
-                    placeholder="예: C:\output 또는 ./output"
-                    value={target.path}
-                    onChange={(e) => updateTarget(i, 'path', e.target.value)}
-                  />
-                </div>
+                <>
+                  <div className="form-row">
+                    <label>출력 경로</label>
+                    <input
+                      type="text"
+                      placeholder="비워두면 브라우저 다운로드"
+                      value={target.path}
+                      onChange={(e) => updateTarget(i, 'path', e.target.value)}
+                    />
+                  </div>
+                  <p style={{ fontSize: 12, color: '#666', paddingLeft: 24, marginTop: -4 }}>
+                    {target.path ? `${target.path} 경로에 저장됩니다` : '경로를 비워두면 변환 후 브라우저에서 다운로드합니다'}
+                  </p>
+                </>
               )}
 
               {target.type === 'ftp' && (
@@ -117,8 +128,8 @@ export default function OutputTargets({ settings, setSettings }) {
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )
       ))}
     </section>
   );
