@@ -3,8 +3,15 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const WINGET_LINKS = path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links');
-const ENV_PATH = `${process.env.PATH};${WINGET_LINKS}`;
+const isWin = process.platform === 'win32';
+const EXTRA_PATHS = [];
+if (isWin) {
+  EXTRA_PATHS.push(path.join(os.homedir(), 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links'));
+} else {
+  EXTRA_PATHS.push('/usr/local/bin', '/opt/homebrew/bin', '/usr/bin');
+}
+const PATH_SEP = isWin ? ';' : ':';
+const ENV_PATH = [process.env.PATH, ...EXTRA_PATHS].join(PATH_SEP);
 const ASSET_DIR = path.join(__dirname, 'assets');
 
 function runFFmpeg(args, onProgress, duration) {

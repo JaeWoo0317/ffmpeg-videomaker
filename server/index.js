@@ -243,28 +243,43 @@ app.get('/api/output/:filename', (req, res) => {
 app.get('/api/browse-folders', (req, res) => {
   const reqPath = req.query.path || '';
   try {
-    // 루트: 드라이브 목록 반환
+    // 루트: 드라이브/볼륨 목록 반환
     if (!reqPath) {
-      const drives = [];
-      for (let i = 65; i <= 90; i++) {
-        const drive = String.fromCharCode(i) + ':\\';
-        try { fs.accessSync(drive); drives.push({ name: drive, path: drive, type: 'drive' }); } catch {}
-      }
-      // 바탕화면, 다운로드 등 빠른 접근
       const home = require('os').homedir();
+      const isWin = process.platform === 'win32';
+      const rootDrives = [];
+
+      if (isWin) {
+        for (let i = 65; i <= 90; i++) {
+          const drive = String.fromCharCode(i) + ':\\';
+          try { fs.accessSync(drive); rootDrives.push({ name: drive, path: drive, type: 'drive' }); } catch {}
+        }
+      } else {
+        rootDrives.push({ name: '/', path: '/', type: 'drive' });
+        const volumes = '/Volumes';
+        if (fs.existsSync(volumes)) {
+          try {
+            fs.readdirSync(volumes, { withFileTypes: true })
+              .filter(e => e.isDirectory() || e.isSymbolicLink())
+              .forEach(e => rootDrives.push({ name: e.name, path: path.join(volumes, e.name), type: 'drive' }));
+          } catch {}
+        }
+      }
+
+      // 바탕화면, 다운로드 등 빠른 접근
       const quickAccess = [
         { name: '바탕화면', path: path.join(home, 'Desktop') },
         { name: '다운로드', path: path.join(home, 'Downloads') },
         { name: '문서', path: path.join(home, 'Documents') },
-        { name: '비디오', path: path.join(home, 'Videos') },
+        { name: isWin ? '비디오' : '동영상', path: path.join(home, isWin ? 'Videos' : 'Movies') },
       ].filter((q) => { try { fs.accessSync(q.path); return true; } catch { return false; } })
        .map((q) => ({ ...q, type: 'quick' }));
-      return res.json({ current: '', folders: [...quickAccess, ...drives] });
+      return res.json({ current: '', folders: [...quickAccess, ...rootDrives] });
     }
 
     const absPath = path.resolve(reqPath);
     const entries = fs.readdirSync(absPath, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== '$Recycle.Bin' && e.name !== 'System Volume Information')
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && !['$Recycle.Bin', 'System Volume Information', '.Trash', '.Spotlight-V100', '.fseventsd'].includes(e.name))
       .map((e) => ({ name: e.name, path: path.join(absPath, e.name), type: 'folder' }))
       .sort((a, b) => a.name.localeCompare(b.name));
     const parent = path.dirname(absPath);
@@ -274,18 +289,25 @@ app.get('/api/browse-folders', (req, res) => {
   }
 });
 
-// Windows 네이티브 폴더 선택 대화상자
+// 네이티브 폴더 선택 대화상자 (Windows/Mac)
 app.get('/api/pick-folder', (req, res) => {
   const { execSync } = require('child_process');
+  const isWin = process.platform === 'win32';
   try {
-    const ps = `
-      Add-Type -AssemblyName System.Windows.Forms
-      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-      $dialog.Description = '출력 폴더를 선택하세요'
-      $dialog.ShowNewFolderButton = $true
-      if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath } else { '' }
-    `;
-    const result = execSync(`powershell -Command "${ps.replace(/\n/g, ' ')}"`, { encoding: 'utf8', timeout: 60000 }).trim();
+    let result = '';
+    if (isWin) {
+      const ps = `
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = '출력 폴더를 선택하세요'
+        $dialog.ShowNewFolderButton = $true
+        if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath } else { '' }
+      `;
+      result = execSync(`powershell -Command "${ps.replace(/\n/g, ' ')}"`, { encoding: 'utf8', timeout: 60000 }).trim();
+    } else {
+      const script = 'osascript -e \'tell application "Finder" to activate\' -e \'POSIX path of (choose folder with prompt "출력 폴더를 선택하세요")\'';
+      result = execSync(script, { encoding: 'utf8', timeout: 60000 }).trim();
+    }
     if (result) {
       res.json({ path: result });
     } else {

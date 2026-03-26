@@ -33,9 +33,13 @@
 
 ## 🖥️ 설치하기 (처음부터 차근차근)
 
-> **필요한 것**: Windows 컴퓨터, 인터넷 연결
+> **지원 OS**: Windows, macOS
+>
+> **필요한 것**: 컴퓨터, 인터넷 연결
 >
 > 아래 순서대로 따라하면 됩니다. 어렵지 않아요!
+>
+> 👉 **Mac 사용자**는 [Mac 설치 가이드](#-mac-설치-가이드)로 이동하세요
 
 ---
 
@@ -216,6 +220,61 @@ ffmpeg-videomaker/
 
 ---
 
+## 🍎 Mac 설치 가이드
+
+### STEP 1. Homebrew 설치하기
+
+Homebrew는 Mac에서 프로그램을 설치하는 도구입니다.
+
+1. **Spotlight** (Cmd + Space) 를 열고 `터미널` 입력 → Enter
+2. 터미널에 아래를 복사-붙여넣기하고 Enter:
+   ```
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+3. 비밀번호를 물어보면 Mac 로그인 비밀번호 입력 (화면에 안 보여도 정상)
+4. 설치 완료 메시지가 나올 때까지 기다립니다
+
+### STEP 2. Node.js, FFmpeg 설치하기
+
+터미널에서:
+```
+brew install node ffmpeg
+```
+
+확인:
+```
+node -v
+ffmpeg -version
+```
+
+### STEP 3. 프로그램 다운로드 및 설치
+
+```
+cd ~/Desktop
+git clone https://github.com/JaeWoo0317/ffmpeg-videomaker.git
+cd ffmpeg-videomaker
+chmod +x setup.sh start.sh update.sh
+./setup.sh
+```
+
+### STEP 4. 실행하기
+
+```
+./start.sh
+```
+
+브라우저가 자동으로 `http://localhost:4000` 을 엽니다.
+
+> 종료하려면 터미널에서 **Ctrl + C**
+
+### Mac 업데이트
+
+```
+./update.sh
+```
+
+---
+
 ## 🔄 업데이트하기
 
 1. `ffmpeg-videomaker` 폴더에서 **`update.bat`**을 **더블클릭**합니다
@@ -233,6 +292,8 @@ ffmpeg-videomaker/
 | `node -v` 가 안 됨 | Node.js를 다시 설치하세요 |
 | `ffmpeg` 을 찾을 수 없음 | PowerShell을 **닫고 다시 열고** `ffmpeg -version` 확인 |
 | GPU 가속이 안 됨 | NVIDIA 드라이버 업데이트 필요. 없어도 CPU로 정상 작동합니다 |
+| Mac에서 `./start.sh` 실행 안 됨 | `chmod +x start.sh` 실행 후 다시 시도 |
+| Mac에서 `brew`가 안 됨 | Homebrew 설치 후 터미널을 껐다 켜세요 |
 | 브라우저에서 접속 안 됨 | `start.bat` 검은 창이 열려있는지 확인 + 주소 `http://localhost:4000` 정확히 입력 |
 | setup.bat 실행 오류 | PowerShell을 **관리자 권한**으로 실행 (우클릭 → 관리자 권한으로 실행) |
 | 변환 중 에러 | 영상 파일이 손상되지 않았는지 확인. 다른 코덱으로 시도해보세요 |
