@@ -7,7 +7,9 @@ echo "VideoMaker 시작 중..."
 if [ ! -d "client/dist" ]; then
     echo "[!] 클라이언트가 빌드되지 않았습니다. setup.command를 먼저 실행하세요."
     echo ""
-    read -n 1 -s -r -p "아무 키나 누르면 창이 닫힙니다..."
+    echo "5초 후 창이 자동으로 닫힙니다..."
+    sleep 5
+    osascript -e 'tell application "Terminal" to close front window' &
     exit 1
 fi
 
@@ -20,3 +22,9 @@ echo ""
 (sleep 2 && open "http://localhost:4000") &
 
 node server/index.js
+
+# 서버 종료 후 자동으로 창 닫기
+echo ""
+echo "서버가 종료되었습니다. 3초 후 창이 자동으로 닫힙니다..."
+sleep 3
+osascript -e 'tell application "Terminal" to close front window' &
