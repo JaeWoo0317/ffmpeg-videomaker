@@ -183,8 +183,15 @@ FFmpeg은 영상을 변환하는 도구입니다.
 
 ```
 ffmpeg-videomaker/
-├── setup.bat                  # 원클릭 설치
-├── start.bat                  # 원클릭 실행
+├── setup.bat                  # Windows 원클릭 설치
+├── start.bat                  # Windows 원클릭 실행
+├── update.bat                 # Windows 원클릭 업데이트
+├── setup.command              # Mac 더블클릭 설치
+├── start.command              # Mac 더블클릭 실행
+├── update.command             # Mac 더블클릭 업데이트
+├── setup.sh                   # Mac 터미널 설치
+├── start.sh                   # Mac 터미널 실행
+├── update.sh                  # Mac 터미널 업데이트
 ├── server/
 │   ├── index.js               # Express 서버 + Socket.IO
 │   ├── ffmpeg.js              # FFmpeg 변환/GPU 감지
@@ -234,6 +241,15 @@ Homebrew는 Mac에서 프로그램을 설치하는 도구입니다.
 3. 비밀번호를 물어보면 Mac 로그인 비밀번호 입력 (화면에 안 보여도 정상)
 4. 설치 완료 메시지가 나올 때까지 기다립니다
 
+> ⚠️ **Apple Silicon (M1/M2/M3/M4) Mac 사용자 필수!**
+>
+> Homebrew 설치 후 `brew` 명령어가 안 될 수 있습니다. 아래 두 줄을 터미널에 붙여넣기하세요:
+> ```
+> echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+> eval "$(/opt/homebrew/bin/brew shellenv)"
+> ```
+> Intel Mac은 이 단계가 필요 없습니다.
+
 ### STEP 2. Node.js, FFmpeg 설치하기
 
 터미널에서:
@@ -249,6 +265,16 @@ ffmpeg -version
 
 ### STEP 3. 프로그램 다운로드 및 설치
 
+#### 방법 A: 더블클릭으로 설치 (터미널 몰라도 OK!)
+
+1. GitHub에서 ZIP 다운로드 후 압축 해제 (또는 git clone)
+2. Finder에서 `ffmpeg-videomaker` 폴더 열기
+3. **`setup.command`** 파일을 **더블클릭**
+4. "개발자를 확인할 수 없습니다" 경고가 뜨면: 우클릭 → 열기 → 열기 클릭
+5. 설치가 완료될 때까지 기다리기
+
+#### 방법 B: 터미널에서 설치
+
 ```
 cd ~/Desktop
 git clone https://github.com/JaeWoo0317/ffmpeg-videomaker.git
@@ -259,6 +285,12 @@ chmod +x setup.sh start.sh update.sh
 
 ### STEP 4. 실행하기
 
+#### 더블클릭으로 실행
+
+Finder에서 **`start.command`** 파일을 **더블클릭**하면 자동으로 서버가 시작되고 브라우저가 열립니다.
+
+#### 터미널에서 실행
+
 ```
 ./start.sh
 ```
@@ -268,6 +300,8 @@ chmod +x setup.sh start.sh update.sh
 > 종료하려면 터미널에서 **Ctrl + C**
 
 ### Mac 업데이트
+
+Finder에서 **`update.command`** 더블클릭, 또는 터미널에서:
 
 ```
 ./update.sh
@@ -293,7 +327,8 @@ chmod +x setup.sh start.sh update.sh
 | `ffmpeg` 을 찾을 수 없음 | PowerShell을 **닫고 다시 열고** `ffmpeg -version` 확인 |
 | GPU 가속이 안 됨 | NVIDIA 드라이버 업데이트 필요. 없어도 CPU로 정상 작동합니다 |
 | Mac에서 `./start.sh` 실행 안 됨 | `chmod +x start.sh` 실행 후 다시 시도 |
-| Mac에서 `brew`가 안 됨 | Homebrew 설치 후 터미널을 껐다 켜세요 |
+| Mac에서 `brew`가 안 됨 (Intel) | Homebrew 설치 후 터미널을 껐다 켜세요 |
+| Mac에서 `brew`가 안 됨 (M칩) | `echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile` 실행 후 터미널 재시작 |
 | 브라우저에서 접속 안 됨 | `start.bat` 검은 창이 열려있는지 확인 + 주소 `http://localhost:4000` 정확히 입력 |
 | setup.bat 실행 오류 | PowerShell을 **관리자 권한**으로 실행 (우클릭 → 관리자 권한으로 실행) |
 | 변환 중 에러 | 영상 파일이 손상되지 않았는지 확인. 다른 코덱으로 시도해보세요 |
