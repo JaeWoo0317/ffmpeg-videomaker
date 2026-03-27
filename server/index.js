@@ -5,6 +5,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 const { convertVideo, convertVideoParallel, extractAudio, checkGpuSupport } = require('./ffmpeg');
 const { transferFile } = require('./transfer');
@@ -239,6 +240,44 @@ app.get('/api/output/:filename', (req, res) => {
   res.download(filePath);
 });
 
+// 파일명 변경 API
+app.post('/api/rename-output', (req, res) => {
+  const { oldFilename, newName } = req.body;
+  if (!oldFilename || !newName) {
+    return res.status(400).json({ error: 'oldFilename and newName required' });
+  }
+
+  try {
+    const oldBase = path.basename(oldFilename);
+    const ext = path.extname(oldBase);
+    // 새 이름에서 위험 문자 제거
+    const cleanName = newName.replace(/[<>:"/\\|?*]/g, '_').trim();
+    if (!cleanName) return res.status(400).json({ error: 'Invalid filename' });
+
+    const newBase = cleanName + ext;
+    const oldPath = path.join(OUTPUT_DIR, oldBase);
+    const newPath = path.join(OUTPUT_DIR, newBase);
+
+    if (!fs.existsSync(oldPath)) {
+      return res.status(404).json({ error: 'File not found: ' + oldBase });
+    }
+
+    fs.renameSync(oldPath, newPath);
+
+    // 로컬 저장 경로 파일도 변경
+    const { savedPath } = req.body;
+    let newSavedPath = '';
+    if (savedPath && fs.existsSync(savedPath)) {
+      newSavedPath = path.join(path.dirname(savedPath), newBase);
+      fs.renameSync(savedPath, newSavedPath);
+    }
+
+    res.json({ success: true, newFilename: newBase, newSavedPath: newSavedPath || '' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 폴더 탐색 API
 app.get('/api/browse-folders', (req, res) => {
   const reqPath = req.query.path || '';
@@ -331,9 +370,28 @@ if (fs.existsSync(CLIENT_DIST)) {
   });
 }
 
+// 브라우저 연결 감지 - 모든 연결이 끊기면 5초 후 서버 종료
+let shutdownTimer = null;
+let hasConnectedOnce = false;
+
 io.on('connection', (socket) => {
+  hasConnectedOnce = true;
   console.log('Client connected:', socket.id);
-  socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
+  if (shutdownTimer) {
+    clearTimeout(shutdownTimer);
+    shutdownTimer = null;
+    console.log('재연결 감지. 서버 종료 취소.');
+  }
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+    if (hasConnectedOnce && io.engine.clientsCount === 0) {
+      console.log('모든 브라우저 연결 종료됨. 5초 후 서버를 종료합니다...');
+      shutdownTimer = setTimeout(() => {
+        console.log('서버를 종료합니다.');
+        process.exit(0);
+      }, 5000);
+    }
+  });
 });
 
 const PORT = process.env.PORT || 4000;

@@ -65,6 +65,8 @@ function App() {
   const [progress, setProgress] = useState(null);
   const [transferProgress, setTransferProgress] = useState(null);
   const [results, setResults] = useState([]);
+  const [editingIndex, setEditingIndex] = useState(-1);
+  const [editName, setEditName] = useState('');
   const [errors, setErrors] = useState([]);
   const jobIdRef = useRef(null);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -168,6 +170,40 @@ function App() {
     setUploadedFiles([]);
     setResults([]);
     setErrors([]);
+  };
+
+  const startEditing = (index) => {
+    const r = results[index];
+    const ext = r.outputFilename.lastIndexOf('.');
+    const nameOnly = ext > 0 ? r.outputFilename.substring(0, ext) : r.outputFilename;
+    setEditingIndex(index);
+    setEditName(nameOnly);
+  };
+
+  const cancelEditing = () => {
+    setEditingIndex(-1);
+    setEditName('');
+  };
+
+  const handleRename = async (index) => {
+    const r = results[index];
+    if (!editName.trim()) { cancelEditing(); return; }
+    try {
+      const res = await fetch('/api/rename-output', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldFilename: r.outputFilename, newName: editName.trim(), savedPath: r.savedPath || '' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResults((prev) => prev.map((item, i) => i === index ? { ...item, outputFilename: data.newFilename, savedPath: data.newSavedPath || item.savedPath } : item));
+      } else {
+        alert('이름 변경 실패: ' + (data.error || '알 수 없는 오류'));
+      }
+    } catch (err) {
+      alert('이름 변경 실패: ' + err.message);
+    }
+    cancelEditing();
   };
 
   const applyPreset = (preset) => {
@@ -328,11 +364,27 @@ function App() {
                               <div className="result-info">
                                 <span>{r.originalName} → {r.outputFilename}</span>
                                 {r.savedPath && <span className="saved-path" title={r.savedPath}>저장 위치: {r.savedPath}</span>}
+                                {editingIndex === i ? (
+                                  <div className="rename-row">
+                                    <input
+                                      className="rename-input"
+                                      value={editName}
+                                      onChange={(e) => setEditName(e.target.value)}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') handleRename(i); if (e.key === 'Escape') cancelEditing(); }}
+                                      autoFocus
+                                    />
+                                    <span className="rename-ext">{r.outputFilename.substring(r.outputFilename.lastIndexOf('.'))}</span>
+                                    <button className="btn-rename-ok" onClick={() => handleRename(i)}>확인</button>
+                                    <button className="btn-rename-cancel" onClick={cancelEditing}>취소</button>
+                                  </div>
+                                ) : (
+                                  <button className="btn-rename" onClick={() => startEditing(i)}>이름 수정</button>
+                                )}
                               </div>
                             </li>
                           ))}
                         </ul>
-                        <button className="btn convert" style={{ marginTop: 16, width: '100%' }} onClick={() => { cleanupListeners(); setProgress(null); setTransferProgress(null); setErrors([]); setResults([]); setConverting(false); }}>닫기</button>
+                        <button className="btn convert" style={{ marginTop: 16, width: '100%' }} onClick={() => { cleanupListeners(); setProgress(null); setTransferProgress(null); setErrors([]); setResults([]); setConverting(false); }}>확인</button>
                       </div>
                     )}
                   </div>

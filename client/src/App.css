@@ -834,3 +834,82 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 파일명 변경 UI */
+.rename-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #333;
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.rename-input:focus {
+  border-color: #4a9eff;
+}
+
+.rename-ext {
+  font-size: 13px;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.btn-rename {
+  margin-top: 6px;
+  background: #444;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 12px;
+  color: #ccc;
+  transition: background 0.2s;
+  align-self: flex-start;
+}
+
+.btn-rename:hover {
+  background: #555;
+  color: #fff;
+}
+
+.btn-rename-ok,
+.btn-rename-cancel {
+  background: none;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+  color: #fff;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.btn-rename-ok {
+  color: #4caf50;
+  border-color: #4caf50;
+}
+
+.btn-rename-ok:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.btn-rename-cancel {
+  color: #f44336;
+  border-color: #f44336;
+}
+
+.btn-rename-cancel:hover {
+  background: rgba(244, 67, 54, 0.2);
+}
