@@ -11,8 +11,7 @@ git pull
 if [ $? -ne 0 ]; then
     echo "[오류] git pull 실패. Git이 설치되어 있는지 확인하세요."
     echo ""
-    echo "5초 후 창이 자동으로 닫힙니다..."
-    sleep 5
+    read -n 1 -s -r -p "아무 키나 누르면 창이 닫힙니다..."
     osascript -e 'tell application "Terminal" to close front window' &
     exit 1
 fi

@@ -7,8 +7,7 @@ echo "VideoMaker 시작 중..."
 if [ ! -d "client/dist" ]; then
     echo "[!] 클라이언트가 빌드되지 않았습니다. setup.command를 먼저 실행하세요."
     echo ""
-    echo "5초 후 창이 자동으로 닫힙니다..."
-    sleep 5
+    read -n 1 -s -r -p "아무 키나 누르면 창이 닫힙니다..."
     osascript -e 'tell application "Terminal" to close front window' &
     exit 1
 fi

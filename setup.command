@@ -11,8 +11,7 @@ if ! command -v node &> /dev/null; then
     echo "[오류] Node.js가 설치되어 있지 않습니다."
     echo "  brew install node  또는  https://nodejs.org/ 에서 설치하세요."
     echo ""
-    echo "5초 후 창이 자동으로 닫힙니다..."
-    sleep 5
+    read -n 1 -s -r -p "아무 키나 누르면 창이 닫힙니다..."
     osascript -e 'tell application "Terminal" to close front window' &
     exit 1
 fi
