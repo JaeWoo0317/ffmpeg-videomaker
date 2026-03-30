@@ -368,6 +368,8 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
       if (idx > -1) args.splice(idx, 2);
     }
     args.push('-b:v', `${videoBitrate}k`);
+    args.push('-maxrate', `${videoBitrate}k`);
+    args.push('-bufsize', `${Math.floor(videoBitrate / 2)}k`);
   }
 
   // 멀티스레드 (모든 CPU 코어 활용)
