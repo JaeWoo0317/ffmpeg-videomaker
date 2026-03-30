@@ -358,7 +358,7 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
 
   // 파일 크기 제한
   if (settings.maxFileSizeMB && effectiveDuration > 0) {
-    const targetBits = settings.maxFileSizeMB * 8 * 1024 * 1024;
+    const targetBits = (settings.maxFileSizeMB * 0.95) * 8 * 1024 * 1024;
     const audioBits = (settings.audioBitrate || 192) * 1000 * effectiveDuration;
     const videoBitrate = Math.max(100, Math.floor((targetBits - audioBits) / effectiveDuration / 1000));
     // CRF/CQ/비트레이트 관련 옵션 모두 제거 (중복 방지)
