@@ -470,7 +470,11 @@ async function convertVideoParallel(inputPath, outputPath, settings, onProgress)
     const segSettings = { ...settings };
     segSettings.trimStart = formatTime(startSec);
     segSettings.trimEnd = formatTime(endSec);
-    // 자막/워터마크는 각 세그먼트에 적용
+    // 파일 크기 제한: 세그먼트 수로 나눠서 적용
+    if (segSettings.maxFileSizeMB) {
+      segSettings.maxFileSizeMB = Math.floor(segSettings.maxFileSizeMB / numSegments);
+      if (segSettings.maxFileSizeMB < 1) segSettings.maxFileSizeMB = 1;
+    }
     return segSettings;
   };
 
