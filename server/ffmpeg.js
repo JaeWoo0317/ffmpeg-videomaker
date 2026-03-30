@@ -361,15 +361,18 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
     const targetBits = settings.maxFileSizeMB * 8 * 1024 * 1024;
     const audioBits = (settings.audioBitrate || 192) * 1000 * effectiveDuration;
     const videoBitrate = Math.max(100, Math.floor((targetBits - audioBits) / effectiveDuration / 1000));
-    // CRF/CQ 제거하고 비트레이트 강제 적용
-    const removeArgs = ['-crf', '-cq', '-global_quality', '-b:v'];
+    // CRF/CQ/비트레이트 관련 옵션 모두 제거 (중복 방지)
+    const removeArgs = ['-crf', '-cq', '-global_quality', '-b:v', '-maxrate', '-bufsize'];
     for (const ra of removeArgs) {
-      const idx = args.indexOf(ra);
-      if (idx > -1) args.splice(idx, 2);
+      let idx;
+      while ((idx = args.indexOf(ra)) > -1) {
+        args.splice(idx, 2);
+      }
     }
     args.push('-b:v', `${videoBitrate}k`);
     args.push('-maxrate', `${videoBitrate}k`);
     args.push('-bufsize', `${Math.floor(videoBitrate / 2)}k`);
+    console.log(`[파일크기제한] 목표: ${settings.maxFileSizeMB}MB, 영상길이: ${effectiveDuration.toFixed(1)}s, 비트레이트: ${videoBitrate}kbps`);
   }
 
   // 멀티스레드 (모든 CPU 코어 활용)
