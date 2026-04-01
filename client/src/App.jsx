@@ -59,7 +59,8 @@ function App() {
   const [files, setFiles] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [gpuInfo, setGpuInfo] = useState(null);
-  const [uploading, setUploading] = useState(false);
+  // uploading 상태는 Electron에서 불필요하지만 호환성 유지
+
   const [converting, setConverting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [progress, setProgress] = useState(null);
@@ -100,23 +101,20 @@ function App() {
 
   useEffect(() => cleanupListeners, [cleanupListeners]);
 
-  const handleUpload = async (selectedFiles) => {
-    const formData = new FormData();
-    const fileList = Array.from(selectedFiles);
-    fileList.forEach((f) => formData.append('files', f));
-    setFiles(fileList.map((f) => ({ name: f.name, size: f.size })));
-    setResults([]);
-    setErrors([]);
-    setUploading(true);
-
+  const handleAddLocalFiles = async (filePaths) => {
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/add-local-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePaths }),
+      });
       const data = await res.json();
-      setUploadedFiles(data.files);
+      if (data.files && data.files.length > 0) {
+        setFiles(prev => [...prev, ...data.files.map(f => ({ name: f.originalName, size: f.size }))]);
+        setUploadedFiles(prev => [...prev, ...data.files]);
+      }
     } catch (err) {
-      setErrors(['파일 업로드 실패: ' + err.message]);
-    } finally {
-      setUploading(false);
+      setErrors(['로컬 파일 추가 실패: ' + err.message]);
     }
   };
 
@@ -236,7 +234,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        <FileUpload onUpload={handleUpload} files={files} uploading={uploading} onRemoveFile={!converting ? handleRemoveFile : null} />
+        <FileUpload onAddLocalFiles={handleAddLocalFiles} files={files} onRemoveFile={!converting ? handleRemoveFile : null} />
 
         {uploadedFiles.length > 0 && (
           <>

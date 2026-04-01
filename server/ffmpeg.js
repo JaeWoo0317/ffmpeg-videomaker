@@ -10,13 +10,24 @@ if (isWin) {
 } else {
   EXTRA_PATHS.push('/usr/local/bin', '/opt/homebrew/bin', '/usr/bin');
 }
+
+// Electron 번들된 FFmpeg 경로 (환경변수로 전달됨)
+if (process.env.FFMPEG_PATH) {
+  const ffmpegDir = path.dirname(process.env.FFMPEG_PATH);
+  EXTRA_PATHS.unshift(ffmpegDir);
+}
+
 const PATH_SEP = isWin ? ';' : ':';
 const ENV_PATH = [process.env.PATH, ...EXTRA_PATHS].join(PATH_SEP);
 const ASSET_DIR = path.join(__dirname, 'assets');
 
+// FFmpeg 실행 파일 이름 (번들 경로가 있으면 전체 경로 사용)
+const FFMPEG_BIN = process.env.FFMPEG_PATH || 'ffmpeg';
+const FFPROBE_BIN = process.env.FFPROBE_PATH || 'ffprobe';
+
 function runFFmpeg(args, onProgress, duration) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', ['-y', ...args, '-progress', 'pipe:1', '-nostats'], {
+    const proc = spawn(FFMPEG_BIN, ['-y', ...args, '-progress', 'pipe:1', '-nostats'], {
       env: { ...process.env, PATH: ENV_PATH },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -51,7 +62,7 @@ function runFFmpeg(args, onProgress, duration) {
 
 function getVideoDuration(inputPath) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffprobe', [
+    const proc = spawn(FFPROBE_BIN, [
       '-v', 'error',
       '-show_entries', 'format=duration',
       '-of', 'csv=p=0',
@@ -70,7 +81,7 @@ function getVideoDuration(inputPath) {
 
 function testEncoder(encoder) {
   return new Promise((resolve) => {
-    const proc = spawn('ffmpeg', [
+    const proc = spawn(FFMPEG_BIN, [
       '-f', 'lavfi', '-i', 'nullsrc=s=256x256:d=1', '-frames:v', '1',
       '-c:v', encoder, '-f', 'null', '-',
     ], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PATH: ENV_PATH } });
@@ -396,7 +407,7 @@ async function convertVideo(inputPath, outputPath, settings, onProgress) {
 
 function getKeyframes(inputPath, duration) {
   return new Promise((resolve) => {
-    const proc = spawn('ffprobe', [
+    const proc = spawn(FFPROBE_BIN, [
       '-v', 'error', '-select_streams', 'v:0',
       '-show_entries', 'packet=pts_time,flags',
       '-of', 'csv=p=0',

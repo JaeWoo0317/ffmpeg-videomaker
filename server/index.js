@@ -47,7 +47,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 * 1024 },
 });
 
 // 작업 관리 (1시간 후 자동 정리)
@@ -141,7 +141,8 @@ app.post('/api/convert', async (req, res) => {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const inputPath = path.join(UPLOAD_DIR, file.filename);
+      // 로컬 파일은 원본 경로 직접 사용, 업로드 파일은 uploads 폴더
+      const inputPath = file.isLocal ? file.path : path.join(UPLOAD_DIR, file.filename);
 
       if (!fs.existsSync(inputPath)) {
         throw new Error(`입력 파일을 찾을 수 없습니다: ${file.originalName}`);
@@ -357,6 +358,50 @@ app.get('/api/pick-folder', (req, res) => {
   }
 });
 
+// 로컬 파일 탐색 API (폴더 내 영상 파일 목록)
+app.get('/api/browse-files', (req, res) => {
+  const reqPath = req.query.path || '';
+  const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'];
+  try {
+    const absPath = path.resolve(reqPath);
+    const entries = fs.readdirSync(absPath, { withFileTypes: true });
+    const files = entries
+      .filter(e => e.isFile() && videoExts.includes(path.extname(e.name).toLowerCase()))
+      .map(e => {
+        const filePath = path.join(absPath, e.name);
+        const stats = fs.statSync(filePath);
+        return { name: e.name, path: filePath, size: stats.size };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ files });
+  } catch (err) {
+    res.json({ files: [] });
+  }
+});
+
+// 로컬 파일 직접 추가 (업로드 없이 경로만 등록)
+app.post('/api/add-local-files', (req, res) => {
+  const { filePaths } = req.body;
+  if (!filePaths || filePaths.length === 0) {
+    return res.status(400).json({ error: 'No file paths provided' });
+  }
+  const files = [];
+  for (const fp of filePaths) {
+    const absPath = path.resolve(fp);
+    if (!fs.existsSync(absPath)) continue;
+    const stats = fs.statSync(absPath);
+    files.push({
+      id: uuidv4(),
+      originalName: path.basename(absPath),
+      filename: path.basename(absPath),
+      path: absPath,
+      size: stats.size,
+      isLocal: true,
+    });
+  }
+  res.json({ files });
+});
+
 // 기본 다운로드 경로 반환
 app.get('/api/default-path', (req, res) => {
   const home = require('os').homedir();
@@ -370,7 +415,8 @@ if (fs.existsSync(CLIENT_DIST)) {
   });
 }
 
-// 브라우저 연결 감지 - 모든 연결이 끊기면 5초 후 서버 종료
+// 연결 관리 (Electron 모드에서는 자동 종료 비활성화)
+const isElectronMode = process.env.ELECTRON_MODE === 'true';
 let shutdownTimer = null;
 let hasConnectedOnce = false;
 
@@ -384,7 +430,7 @@ io.on('connection', (socket) => {
   }
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    if (hasConnectedOnce && io.engine.clientsCount === 0) {
+    if (!isElectronMode && hasConnectedOnce && io.engine.clientsCount === 0) {
       console.log('모든 브라우저 연결 종료됨. 5초 후 서버를 종료합니다...');
       shutdownTimer = setTimeout(() => {
         console.log('서버를 종료합니다.');
@@ -398,3 +444,6 @@ const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+// 대용량 파일 업로드를 위해 타임아웃 제거
+server.timeout = 0;
+server.keepAliveTimeout = 0;

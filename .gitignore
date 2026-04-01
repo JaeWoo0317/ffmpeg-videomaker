@@ -5,3 +5,4 @@ server/assets/
 client/dist/
 .claude/
 *.log
+dist-electron/
