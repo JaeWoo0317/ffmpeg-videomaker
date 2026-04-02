@@ -1,6 +1,6 @@
 {
   "name": "videomaker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -32,16 +32,6 @@
       "!server/assets/**",
       "node_modules/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "node_modules/ffmpeg-static/ffmpeg.exe",
-        "to": "ffmpeg/ffmpeg.exe"
-      },
-      {
-        "from": "node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe",
-        "to": "ffmpeg/ffprobe.exe"
-      }
-    ],
     "win": {
       "target": [
         {
@@ -49,7 +39,55 @@
           "arch": ["x64"]
         }
       ],
+      "extraResources": [
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.exe",
+          "to": "ffmpeg/ffmpeg.exe"
+        },
+        {
+          "from": "node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe",
+          "to": "ffmpeg/ffprobe.exe"
+        }
+      ],
       "icon": null
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg",
+          "to": "ffmpeg/ffmpeg"
+        },
+        {
+          "from": "node_modules/ffprobe-static/bin/darwin/x64/ffprobe",
+          "to": "ffmpeg/ffprobe"
+        }
+      ],
+      "category": "public.app-category.video"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg",
+          "to": "ffmpeg/ffmpeg"
+        },
+        {
+          "from": "node_modules/ffprobe-static/bin/linux/x64/ffprobe",
+          "to": "ffmpeg/ffprobe"
+        }
+      ],
+      "category": "AudioVideo"
     },
     "nsis": {
       "oneClick": false,
