@@ -31,13 +31,44 @@
 
 ---
 
-## 🖥️ 설치하기 (처음부터 차근차근)
+## 🖥️ 데스크톱 앱 다운로드 (가장 쉬운 방법!)
 
-> **지원 OS**: Windows, macOS
+> Node.js, FFmpeg 설치 없이 바로 사용할 수 있습니다.
 >
-> **필요한 것**: 컴퓨터, 인터넷 연결
+> [**Releases 페이지에서 다운로드**](https://github.com/JaeWoo0317/ffmpeg-videomaker/releases/latest)
+
+| 파일명 | 운영체제 | 설명 |
+|--------|---------|------|
+| `VideoMaker Setup x.x.x.exe` | Windows | Windows 설치 파일 |
+| `VideoMaker-x.x.x-arm64.dmg` | macOS (Apple Silicon) | M1/M2/M3/M4 Mac용 |
+| `VideoMaker-x.x.x.dmg` | macOS (Intel) | Intel Mac용 |
+| `VideoMaker-x.x.x.AppImage` | Linux | Linux 실행 파일 |
+
+### 설치 방법
+
+**Windows**: `.exe` 파일을 다운로드 후 더블클릭하여 설치
+
+**macOS**:
+1.  → **이 Mac에 관하여** → 칩 확인 (Apple M 시리즈 → arm64, Intel → 일반 dmg)
+2. `.dmg` 파일을 더블클릭 → VideoMaker를 Applications 폴더로 드래그
+3. "손상되었습니다" 에러가 나오면 터미널에서 실행:
+   ```
+   xattr -cr /Applications/VideoMaker.app
+   ```
+
+**Linux**: 다운로드 후 실행 권한 부여 → 실행
+```
+chmod +x VideoMaker-x.x.x.AppImage
+./VideoMaker-x.x.x.AppImage
+```
+
+---
+
+## 🔧 소스코드에서 직접 설치하기 (개발자용)
+
+> 데스크톱 앱 대신 소스코드를 직접 실행하고 싶은 경우
 >
-> 아래 순서대로 따라하면 됩니다. 어렵지 않아요!
+> **필요한 것**: Node.js, FFmpeg, Git (선택)
 >
 > 👉 **Mac 사용자**는 [Mac 설치 가이드](#-mac-설치-가이드)로 이동하세요
 
@@ -183,33 +214,31 @@ FFmpeg은 영상을 변환하는 도구입니다.
 
 ```
 ffmpeg-videomaker/
-├── setup.bat                  # Windows 원클릭 설치
-├── start.bat                  # Windows 원클릭 실행
-├── update.bat                 # Windows 원클릭 업데이트
-├── setup.command              # Mac 더블클릭 설치
-├── start.command              # Mac 더블클릭 실행
-├── update.command             # Mac 더블클릭 업데이트
-├── setup.sh                   # Mac 터미널 설치
-├── start.sh                   # Mac 터미널 실행
-├── update.sh                  # Mac 터미널 업데이트
+├── electron/
+│   ├── main.js                # Electron 메인 프로세스
+│   └── preload.js             # Electron 프리로드 스크립트
 ├── server/
 │   ├── index.js               # Express 서버 + Socket.IO
 │   ├── ffmpeg.js              # FFmpeg 변환/GPU 감지
 │   └── transfer.js            # 파일 전송 (로컬/FTP/SFTP)
-└── client/
-    └── src/
-        ├── App.jsx            # 메인 앱
-        └── components/
-            ├── FileUpload.jsx      # 파일 업로드
-            ├── SettingsModal.jsx   # 상세 설정 팝업
-            ├── VideoSettings.jsx   # 영상 설정
-            ├── AudioSettings.jsx   # 오디오 설정
-            ├── TrimSettings.jsx    # 구간 설정
-            ├── SubtitleSettings.jsx # 자막 설정
-            ├── WatermarkSettings.jsx # 워터마크 설정
-            ├── CropSettings.jsx    # 크롭 설정
-            ├── OutputTargets.jsx   # 출력 대상
-            └── ProgressBar.jsx     # 진행률 표시
+├── client/
+│   └── src/
+│       ├── App.jsx            # 메인 앱
+│       └── components/
+│           ├── FileUpload.jsx      # 파일 업로드
+│           ├── SettingsModal.jsx   # 상세 설정 팝업
+│           ├── VideoSettings.jsx   # 영상 설정
+│           ├── AudioSettings.jsx   # 오디오 설정
+│           ├── TrimSettings.jsx    # 구간 설정
+│           ├── SubtitleSettings.jsx # 자막 설정
+│           ├── WatermarkSettings.jsx # 워터마크 설정
+│           ├── CropSettings.jsx    # 크롭 설정
+│           ├── OutputTargets.jsx   # 출력 대상
+│           └── ProgressBar.jsx     # 진행률 표시
+├── .github/workflows/         # GitHub Actions 빌드 자동화
+├── setup.bat / setup.command / setup.sh    # 원클릭 설치
+├── start.bat / start.command / start.sh    # 원클릭 실행
+└── update.bat / update.command / update.sh # 원클릭 업데이트
 ```
 
 ---
@@ -218,12 +247,14 @@ ffmpeg-videomaker/
 
 | 구분 | 기술 |
 |------|------|
+| 데스크톱 앱 | Electron, electron-builder |
 | 백엔드 | Node.js, Express, Socket.IO |
 | 프론트엔드 | React, Vite |
 | 영상 처리 | FFmpeg (CLI subprocess) |
 | 파일 업로드 | multer |
 | FTP 전송 | basic-ftp |
 | SFTP 전송 | ssh2-sftp-client |
+| CI/CD | GitHub Actions (멀티플랫폼 자동 빌드) |
 
 ---
 
