@@ -20,7 +20,7 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-const CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist');
+const CLIENT_DIST = process.env.CLIENT_DIST_PATH || path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(CLIENT_DIST)) {
   app.use(express.static(CLIENT_DIST));
 }

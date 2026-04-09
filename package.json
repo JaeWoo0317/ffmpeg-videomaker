@@ -26,11 +26,14 @@
     "files": [
       "electron/**/*",
       "client/dist/**/*",
-      "server/**/*",
-      "!server/uploads/**",
-      "!server/output/**",
-      "!server/assets/**",
       "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "server",
+        "to": "server",
+        "filter": ["**/*", "!uploads/**", "!output/**", "!assets/**"]
+      }
     ],
     "win": {
       "target": [

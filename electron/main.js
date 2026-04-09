@@ -19,6 +19,10 @@ function startServer() {
 
   // 서버 시작
   process.env.ELECTRON_MODE = 'true';
+  if (!isDev) {
+    // 패키징된 앱에서 클라이언트 파일 경로를 서버에 전달
+    process.env.CLIENT_DIST_PATH = path.join(app.getAppPath(), 'client', 'dist');
+  }
   const serverPath = isDev
     ? path.join(__dirname, '..', 'server', 'index.js')
     : path.join(process.resourcesPath, 'server', 'index.js');
